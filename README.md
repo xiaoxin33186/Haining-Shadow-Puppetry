@@ -53,10 +53,11 @@ Once the interface is running, you can interact in two modes:
 Python 3.14.6
 pyautogen 0.10.0
 ## download autogen model
+```bash
 pip install "autogen-agentchat"
 pip install  "autogen-ext[ollama]"
 pip install  "autogen-ext[openai]"
-
+```
 ## System Start Step
 1. ## run ollam
 
