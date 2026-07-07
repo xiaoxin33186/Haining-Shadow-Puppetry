@@ -4,14 +4,126 @@ from autogen_core import CancellationToken
 from autogen_ext.models.openai import OpenAIChatCompletionClient
 from autogen_core.models import ModelInfo, ModelFamily
 
+import os
 import re
 import asyncio
 import logging
+from pathlib import Path
 from typing import Dict, List, Tuple
 
 
+class LocalKnowledgeBase:
+    print("初始化本地知识库...")
+    def __init__(self, kb_dir: str = "local_kb", max_snippet_chars: int = 360):
+        self.kb_dir = Path(kb_dir)
+        self.max_snippet_chars = max_snippet_chars
+        self.documents = []
+        self._load_documents()
+
+    def _load_documents(self):
+        if not self.kb_dir.exists():
+            return
+
+        for path in sorted(self.kb_dir.glob("*")):
+            if path.is_file() and path.suffix.lower() in {".txt", ".md",".docx"}:
+                print(f"加载本地知识库文档: {path}")
+                try:
+                    text = path.read_text(encoding="utf-8").strip()
+                    print(f"成功读取文档: {path}")
+                except UnicodeDecodeError:
+                    text = path.read_text(encoding="utf-8", errors="ignore").strip()
+
+                if text:
+                    self.documents.append({
+                        "path": str(path),
+                        "title": path.stem,
+                        "text": text,
+                    })
+
+    def search(self, query: str, top_n: int = 3):
+        print(f"搜索本地知识库，查询: {query}")
+        if not query or not self.documents:
+            print("查询条件为空或本地知识库无文档")
+            return []
+
+        query_tokens = self._tokenize(query)
+        if not query_tokens:
+            print("查询条件无法分词")
+            return []
+
+        scored = []
+        for doc in self.documents:
+            print(f"query_tokens: {query_tokens}")
+            score = self._score_text(doc["text"], query_tokens)
+            if score > 0:
+                scored.append({
+                    "path": doc["path"],
+                    "title": doc["title"],
+                    "score": score,
+                    "snippet": self._extract_snippet(doc["text"], query_tokens),
+                })
+
+        scored.sort(key=lambda item: item["score"], reverse=True)
+        print(f"本地知识检索到 {len(scored)} 条相关内容")
+        return scored[:top_n]
+#中文滑窗分词
+    def _tokenize(self, text: str):
+        s = (text or "").lower()
+        out = []
+
+    # 1. 英文/数字 token（原逻辑保留）
+        eng_tokens = re.findall(r'[a-zA-Z0-9]+', s)
+        out.extend(eng_tokens)
+
+    # 2. 中文部分：提取纯中文字符串，做 1-gram、2-gram、3-gram 滑窗
+        chinese_chars = re.findall(r'[\u4e00-\u9fff]', s)
+        chinese_str = ''.join(chinese_chars)
+
+        for i in range(len(chinese_str)):
+            out.append(chinese_str[i])                        # 单字
+            if i + 1 < len(chinese_str):
+                out.append(chinese_str[i:i+2])                # 双字
+            if i + 2 < len(chinese_str):
+                out.append(chinese_str[i:i+3])                # 三字
+
+    # 去重，保持顺序
+        seen = set()
+        result = []
+        for t in out:
+            if t and t not in seen:
+                seen.add(t)
+                result.append(t)
+        print(f"分词结果: {result}")
+        return result
+
+
+    def _score_text(self, text: str, tokens):
+        lower_text = text.lower()
+        score = 0
+        for token in tokens:
+            score += lower_text.count(token) * (len(token) if len(token) > 1 else 1)
+            print(f"Score: {score}")
+        return score
+
+    def _extract_snippet(self, text: str, tokens):
+        lower_text = text.lower()
+        for token in tokens:
+            idx = lower_text.find(token)
+            if idx != -1:
+                start = max(0, idx - 120)
+                end = min(len(text), idx + 120)
+                snippet = text[start:end].strip()
+                if start > 0:
+                    snippet = "…" + snippet
+                if end < len(text):
+                    snippet = snippet + "…"
+                return snippet
+
+        return (text[: self.max_snippet_chars] + "…") if len(text) > self.max_snippet_chars else text
+
+
 class DigitalHumanAgentSystem:
-    def __init__(self, action_mapping: Dict[str, str]):
+    def __init__(self, action_mapping: Dict[str, str], kb_dir: str = "local_kb"):
         self.action_mapping = {k.strip().lower(): v for k, v in action_mapping.items()}
 
         self.model_info = ModelInfo(
@@ -21,6 +133,12 @@ class DigitalHumanAgentSystem:
             structured_output=False,
             family=ModelFamily.UNKNOWN,
         )
+
+        self.local_kb = LocalKnowledgeBase(kb_dir)
+        if self.local_kb.documents:
+            print(f"加载本地知识库：{len(self.local_kb.documents)} 个文档")
+        else:
+            print(f"[提示] 未发现本地知识库文档: {Path(kb_dir).resolve()}")
 
         print(f"初始化数字人系统，动作映射: {list(self.action_mapping.keys())}")
         self._init_agents()
@@ -130,9 +248,30 @@ class DigitalHumanAgentSystem:
 
     async def process_input(self, user_input: str) -> Tuple[List[str], str]:
         try:
+            local_context = ""
+            retrieved = self.local_kb.search(user_input)
+            if retrieved:
+                local_lines = [
+                    "以下是本地知识库检索到的相关内容，请优先参考：",
+                ]
+                for item in retrieved:
+                    local_lines.append(f"- {item['title']}: {item['snippet']}")
+                local_context = "\n".join(local_lines)
+                self.logger.info("本地知识检索文档结果: %s", ", ".join([item["title"] for item in retrieved]))
+
+            if local_context:
+                instruction = (
+                    "请严格优先参考上方本地知识库内容来回答用户问题。"
+                    "只有在本地知识库无法覆盖时，才可补充外部或模型知识，"
+                    "并在回答末尾注明是否使用了本地知识库。"
+                )
+                prompt_text = f"{local_context}\n\n{instruction}\n\n用户输入：{user_input}"
+            else:
+                prompt_text = user_input
+
             # 1. 生成文本
             text_result = await self.text_agent.on_messages(
-                [TextMessage(content=user_input, source="user")],
+                [TextMessage(content=prompt_text, source="user")],
                 cancellation_token=CancellationToken(),
             )
             text_response = self._extract_content(text_result)
