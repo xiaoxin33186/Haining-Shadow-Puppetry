@@ -23,9 +23,25 @@ class LocalKnowledgeBase:
     def _load_documents(self):
         if not self.kb_dir.exists():
             return
+        # 尝试导入可选的解析库
+        try:
+            from PyPDF2 import PdfReader
+        except Exception:
+            PdfReader = None
+
+        try:
+            import docx
+        except Exception:
+            docx = None
 
         for path in sorted(self.kb_dir.glob("*")):
-            if path.is_file() and path.suffix.lower() in {".txt", ".md",".docx"}:
+            if not path.is_file():
+                continue
+
+            suffix = path.suffix.lower()
+            text = None
+
+            if suffix in {".txt", ".md"}:
                 print(f"加载本地知识库文档: {path}")
                 try:
                     text = path.read_text(encoding="utf-8").strip()
@@ -33,12 +49,48 @@ class LocalKnowledgeBase:
                 except UnicodeDecodeError:
                     text = path.read_text(encoding="utf-8", errors="ignore").strip()
 
-                if text:
-                    self.documents.append({
-                        "path": str(path),
-                        "title": path.stem,
-                        "text": text,
-                    })
+            elif suffix == ".pdf":
+                if PdfReader is None:
+                    print(f"跳过 {path}：缺少 PyPDF2 库，无法解析 PDF")
+                else:
+                    print(f"解析 PDF 文档: {path}")
+                    try:
+                        reader = PdfReader(str(path))
+                        pages = []
+                        for p in reader.pages:
+                            try:
+                                ptxt = p.extract_text() or ""
+                            except Exception:
+                                ptxt = ""
+                            pages.append(ptxt)
+                        text = "\n".join(pages).strip()
+                        print(f"PDF 解析完成: {path}")
+                    except Exception as e:
+                        print(f"无法解析 PDF {path}: {e}")
+
+            elif suffix == ".docx":
+                if docx is None:
+                    print(f"跳过 {path}：缺少 python-docx，无法解析 Word 文档")
+                else:
+                    print(f"解析 Word 文档: {path}")
+                    try:
+                        doc = docx.Document(str(path))
+                        paras = [p.text for p in doc.paragraphs if p.text]
+                        text = "\n".join(paras).strip()
+                        print(f"Word 解析完成: {path}")
+                    except Exception as e:
+                        print(f"无法解析 Word 文档 {path}: {e}")
+
+            else:
+                # 不支持的文件类型（可扩展）
+                continue
+
+            if text:
+                self.documents.append({
+                    "path": str(path),
+                    "title": path.stem,
+                    "text": text,
+                })
 
     def search(self, query: str, top_n: int = 3):
         print(f"搜索本地知识库，查询: {query}")
