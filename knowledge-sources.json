@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "sources": [
+    {
+      "path": "local_kb",
+      "role": "knowledge"
+    },
+    {
+      "path": "local_kb_extended",
+      "role": "knowledge"
+    },
+    {
+      "path": "question_bank/海宁皮影戏题库答案.md",
+      "role": "qa"
+    },
+    {
+      "path": "question_bank/海宁皮影戏题库.md",
+      "role": "evaluation"
+    }
+  ]
+}

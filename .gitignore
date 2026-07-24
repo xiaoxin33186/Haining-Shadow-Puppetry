@@ -1,0 +1,62 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Packaging / build
+build/
+dist/
+develop-eggs/
+*.egg-info/
+.eggs/
+*.egg
+pip-wheel-metadata/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.python-version
+
+# Testing / coverage
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Local databases
+*.sqlite3
+*.db
+
+# Jupyter
+.ipynb_checkpoints/
+#忽略本地测试常用文件
+model-cn/vosk-model-cn-0.22/ 
+wukong_shadow_play_material_原始大小/
+海宁皮影
+
+# 内嵌仓库备份（勿提交）
+**/.git_backup/
