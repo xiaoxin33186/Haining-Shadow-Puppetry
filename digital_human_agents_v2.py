@@ -191,6 +191,8 @@ async def main():
         "拱手礼": "actions/greet",
         "跳舞": "actions/dance",
         "行礼": "actions/dun",
+        "跳跃": "actions/jump",
+        "抓耳挠腮": "actions/scratch",
         "向前走": "actions/forward",
         "向后走": "actions/back",
         "常态": "actions/normal",

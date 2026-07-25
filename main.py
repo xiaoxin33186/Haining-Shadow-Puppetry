@@ -58,6 +58,8 @@ ACTION_MAP = {
     "跳舞":   "dance",
     "常态":   "normal",
     "行礼":   "dun",
+    "跳跃":   "jump",
+    "抓耳挠腮": "scratch",
     "向前走":   "forward",
     "向后走":   "back",
     "空闲":   "idle",
