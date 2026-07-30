@@ -80,30 +80,58 @@ flowchart TD
 
 ---
 
-### Some solutions  
-## **recommend environment:
-Python 3.14.6
-pyautogen 0.10.0
-## download autogen model
+
+## reference
+https://cloud.tencent.com/developer/article/2542898
+https://blog.csdn.net/qq_36894378/article/details/159215006
+
+---
+
+## 新海宁影部署攻略
+
+### 主项目环境（新代码项目）
+- Python 3.12.13
+
+所需依赖包（可直接用以下命令安装）:
 ```bash
-pip install "autogen-agentchat"
-pip install  "autogen-ext[ollama]"
-pip install  "autogen-ext[openai]"
+pip install aiofiles==25.1.0 annotated-types==0.7.0 anyio==4.14.1 autogen-agentchat==0.7.5 autogen-core==0.7.5 autogen-ext==0.7.5 certifi==2026.6.17 cffi==2.0.0 charset-normalizer==3.4.7 colorama==0.4.6 distro==1.9.0 et_xmlfile==2.0.0 h11==0.16.0 httpcore==1.0.9 httpx==0.28.1 idna==3.18 jiter==0.16.0 jsonref==1.1.0 numpy==2.5.0 ollama==0.6.2 openai==2.44.0 openpyxl==3.1.5 opentelemetry-api==1.43.0 packaging==26.0 pillow==12.2.0 pip==26.1.2 protobuf==5.29.6 pycparser==3.0 pydantic==2.13.4 pydantic_core==2.46.4 pygame==2.6.1 regex==2026.6.28 requests==2.34.2 setuptools==82.0.1 sniffio==1.3.1 sounddevice==0.5.5 srt==3.5.3 tiktoken==0.13.0 tqdm==4.68.3 typing_extensions==4.15.0 typing-inspection==0.4.2 urllib3==2.7.0 vosk==0.3.45 websockets==16.0 wheel==0.47.0 xlrd==2.0.2
 ```
-## System Start Step
-1. ## run ollam
+
+### Langchain-Chatchat 本地知识库环境
+- Python 3.10.20
+
+安装步骤:
+```bash
+pipx install poetry
+cd Langchain-Chatchat/libs/chatchat-server/
+poetry install --with lint,test -E xinference
+# 或使用 pip 编辑模式安装:
+pip install -e .
+```
+
+参考: https://github.com/chatchat-space/Langchain-Chatchat/blob/master/docs/contributing/README_dev.md
+
+### 启动运行
+
+**第一步：启动知识库后端**
+在一个 cmd 窗口中执行:
+```bash
+cd Langchain-Chatchat\libs\chatchat-server
+conda activate chatchat_env
+chatchat start --api
+```
+
+**第二步：启动ollama**
 
 ```bash
 ollama serve   
 ollama run gemma3:4b
 ```
-2. ## run project:
 
+**第三步：启动主程序**
+在另一个 cmd 窗口中执行:
 ```bash
 python main.py
 ```
 
-## reference
-https://cloud.tencent.com/developer/article/2542898
-https://blog.csdn.net/qq_36894378/article/details/159215006
 
