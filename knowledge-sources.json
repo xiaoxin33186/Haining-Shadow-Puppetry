@@ -2,19 +2,47 @@
   "version": 1,
   "sources": [
     {
-      "path": "local_kb",
+      "path": "knowledge_base/海宁小状元皮影介绍.md",
       "role": "knowledge"
     },
     {
-      "path": "local_kb_extended",
+      "path": "knowledge_base/海宁皮影戏影偶美学典范.docx",
       "role": "knowledge"
     },
     {
-      "path": "question_bank/海宁皮影戏题库答案.md",
+      "path": "knowledge_base/海宁皮影戏-历史渊源与非遗地位.md",
+      "role": "knowledge"
+    },
+    {
+      "path": "knowledge_base/海宁皮影戏-经典剧目与表演技法.md",
+      "role": "knowledge"
+    },
+    {
+      "path": "knowledge_base/海宁皮影戏-声腔音乐与艺术特色.md",
+      "role": "knowledge"
+    },
+    {
+      "path": "knowledge_base/海宁皮影戏-制作工艺与影偶造型.md",
+      "role": "knowledge"
+    },
+    {
+      "path": "knowledge_base/海宁皮影戏-传承人物与保护现状.md",
+      "role": "knowledge"
+    },
+    {
+      "path": "knowledge_base/海宁皮影戏-权威核验与常见问答补充.md",
+      "role": "knowledge"
+    },
+    {
+      "path": "knowledge_base/海宁皮影戏-横向扩充与应用场景.md",
+      "role": "knowledge"
+    },
+    {
+      "path": "knowledge_base/海宁皮影戏题库答案.md",
       "role": "qa"
     },
     {
-      "path": "question_bank/海宁皮影戏题库.md",
+      "path": "knowledge_base/海宁皮影戏题库.md",
       "role": "evaluation"
     }
   ]

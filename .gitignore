@@ -53,11 +53,28 @@ Thumbs.db
 
 # Jupyter
 .ipynb_checkpoints/
-#忽略本地测试常用文件
-model-cn/vosk-model-cn-0.22/ 
-wukong_shadow_play_material_原始大小/
-海宁皮影
+#忽略本地测试常用文件（语音模型体积大，可从 VOSK 官网下载）
+model-cn/
 
 # 内嵌仓库备份（勿提交）
 **/.git_backup/
 20260723_三级混合检索集成记录.md
+
+# 知识库自动同步的投放/归档目录（勿提交用户投放内容；仅保留空文件夹占位）
+kb_inbox/*
+!kb_inbox/.gitkeep
+
+# 第三方框架（上传框架代码；排除运行时知识库数据存储 data/）
+Langchain-Chatchat/**/data/
+
+# chatchat 个人会话记录存档（勿提交）
+Langchain-Chatchat/2026-07-13_hhdd_AI会话*.md
+
+# 备份/个人记录（勿提交，不保留占位）
+unused_items/
+20260723_测试运行记录.md
+新海宁影部署攻略.docx
+
+# 启动脚本含本机 conda 路径，勿上传
+start_project.bat
+start_kb_sync.bat

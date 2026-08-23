@@ -1,22 +1,16 @@
 # -*- coding: utf-8 -*-
 # [HYBRID] 三级混合知识检索适配器
-# 第一级：Skill 知识库（QA问答库 + BM25检索 + 抽取式回答）
+# 第一级：Skill 知识库（QA问答库优先 + BM25知识检索 + 抽取式回答/润色）
 # 第二级：Chatchat 向量知识库（语义检索兜底）
 # 第三级：模型直接回答（保底，纯对话）
 # 接口与 ChatchatAgentSystem 完全一致，可直接替换使用
 
-import sys
 import re
 import logging
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, NamedTuple, Optional, Tuple
 
-# ── 加载 portable-knowledge-qa Skill ──
-SKILL_ROOT = Path(__file__).resolve().parent / "portable-knowledge-qa"
-if str(SKILL_ROOT) not in sys.path:
-    sys.path.insert(0, str(SKILL_ROOT))
-
-from portable_knowledge_qa import KnowledgeQAConfig, KnowledgeQAEngine
+from local_knowledge_qa import KnowledgeQAConfig, KnowledgeQAEngine
 
 # ── 复用原有 Chatchat 系统 ──
 from chatchat_adapter import ChatchatAgentSystem
@@ -43,6 +37,28 @@ NO_INFO_KEYWORDS = [
     "没有相关", "没有找到", "不太清楚", "不知道", "无法根据",
     "知识范围", "超出", "暂未收录",
 ]
+
+# ── 动作指令直通表：纯动作指令（如"来一段舞蹈""行个礼"）不进入问答链路 ──
+# 路径需与 actions/ 目录文件名一致（与 main.py ACTION_MAP 的映射相同）
+ACTION_COMMANDS = {
+    "跳舞": ("actions/dance.json", "好的，这就为您献上一段舞蹈！"),
+    "舞蹈": ("actions/dance.json", "好的，这就为您献上一段舞蹈！"),
+    "行礼": ("actions/dun.json", "好的，向您行礼！"),
+    "拱手礼": ("actions/greet.json", "拱手见礼！"),
+    "跳跃": ("actions/jump.json", "跳起来啦！"),
+    "抓耳挠腮": ("actions/scratch.json", "看我抓耳挠腮！"),
+    "向前走": ("actions/forward.json", "好的，向前走两步。"),
+    "向后走": ("actions/back.json", "好的，向后退两步。"),
+    "常态": ("actions/normal.json", "好的，回到常态。"),
+    "空闲": ("actions/idle.json", "好的，休息一下。"),
+}
+
+
+class HybridResponse(NamedTuple):
+    actions: List[str]
+    answer: str
+    match_type: str
+    confidence: float
 
 
 class HybridAgentSystem:
@@ -95,22 +111,39 @@ class HybridAgentSystem:
         print(f"[Hybrid] 三级回答体系已就绪：Skill → Chatchat → 模型直答")
 
     async def process_input(self, user_input: str) -> Tuple[List[str], str]:
+        result = await self.process_input_with_metadata(user_input)
+        return result.actions, result.answer
+
+    async def process_input_with_metadata(self, user_input: str) -> HybridResponse:
         text = user_input.strip()
         if not text:
             default = self.action_mapping.get("常态", "actions/idle")
-            return [default], "你好，有什么想了解的吗？"
+            return HybridResponse([default], "你好，有什么想了解的吗？", "empty", 0.0)
 
-        # ═══════ 第一级：Skill 知识库 ═══════
+        direct = self._match_action_command(text)
+        if direct:
+            action_path, reply = direct
+            logger.info(f"[动作直通] 识别动作指令: '{text}' -> {action_path}")
+            return HybridResponse([action_path], reply, "action", 1.0)
+
+        # ═══════ 第一级：Skill 知识库（QA 优先 + BM25 知识检索）═══════
         try:
             skill_result = self.skill_engine.query(text)
-            if skill_result.match_type in ("qa", "knowledge"):
+            if skill_result.match_type == "qa":
                 answer = skill_result.answer
-                logger.info(f"[Skill] 命中 ({skill_result.match_type}): "
-                            f"{answer[:80]}..." if len(answer) > 80 else f"[Skill] 命中 ({skill_result.match_type}): {answer}")
+                logger.info(f"[Skill] 命中 (qa): "
+                            f"{answer[:80]}..." if len(answer) > 80 else f"[Skill] 命中 (qa): {answer}")
                 actions = await self._generate_action(text, answer)
-                return actions, answer
-            else:
-                logger.info("[Skill] 未找到证据，进入第二级 Chatchat")
+                return HybridResponse(actions, answer, "qa", skill_result.confidence)
+            if skill_result.match_type == "knowledge":
+                base_answer = skill_result.answer
+                retrieval = self.skill_engine.retrieve(text)
+                evidence = "\n".join(retrieval.contexts[:3])
+                logger.info(f"[Skill] 命中 (knowledge) 原始: {base_answer[:60]}...")
+                answer = await self._polish_knowledge_answer(text, evidence, base_answer)
+                actions = await self._generate_action(text, answer)
+                return HybridResponse(actions, answer, "knowledge", skill_result.confidence)
+            logger.info("[Skill] 未找到证据，进入第二级 Chatchat")
         except Exception as e:
             logger.error(f"[Skill] 检索异常: {e}，进入第二级 Chatchat")
 
@@ -119,9 +152,8 @@ class HybridAgentSystem:
             actions, answer = await self.chatchat_system.process_input(text)
             if not self._is_no_info_answer(answer):
                 logger.info(f"[Chatchat] 有答案: {answer[:80]}..." if len(answer) > 80 else f"[Chatchat] 有答案: {answer}")
-                return actions, answer
-            else:
-                logger.info("[Chatchat] 无有效答案，进入第三级模型直答")
+                return HybridResponse(actions, answer, "chatchat", 0.0)
+            logger.info("[Chatchat] 无有效答案，进入第三级模型直答")
         except Exception as e:
             logger.error(f"[Chatchat] 调用失败: {e}，进入第三级模型直答")
 
@@ -130,11 +162,32 @@ class HybridAgentSystem:
             answer = await self._direct_llm_answer(text)
             logger.info(f"[模型直答] 回答: {answer[:80]}..." if len(answer) > 80 else f"[模型直答] 回答: {answer}")
             actions = await self._generate_action(text, answer)
-            return actions, answer
+            return HybridResponse(actions, answer, "direct", 0.0)
         except Exception as e:
             logger.error(f"[模型直答] 失败: {e}")
             default = self.action_mapping.get("常态", "actions/idle")
-            return [default], "抱歉，我处理时遇到了一些问题，请稍后再试。"
+            return HybridResponse([default], "抱歉，我处理时遇到了一些问题，请稍后再试。", "error", 0.0)
+
+    def _match_action_command(self, text: str) -> Optional[Tuple[str, str]]:
+        """识别纯动作指令（如"来一段舞蹈""向前走两步"），命中返回 (动作路径, 回复)。
+
+        规则：输入为短指令，去掉语气虚词后以动作关键词开头才直通，
+        避免误伤"海宁皮影戏的舞蹈有什么特点"等知识问答。
+        """
+        if len(text) > 12:
+            return None
+        stripped = re.sub(
+            r"[来给能会请让为把帮我一一下段个次支首再表演吧，。！？!?、；;：:\s]",
+            "",
+            text,
+        ).strip()
+        if not stripped or len(stripped) > 8:
+            return None
+        for keyword, (action_path, reply) in ACTION_COMMANDS.items():
+            if stripped.startswith(keyword):
+                if Path(action_path).exists():
+                    return action_path, reply
+        return None
 
     def _is_no_info_answer(self, answer: str) -> bool:
         """判断回答是否为'找不到信息'类型的无效回答"""
@@ -145,6 +198,43 @@ class HybridAgentSystem:
             if kw in ans and len(ans) < 60:
                 return True
         return False
+
+    async def _polish_knowledge_answer(self, query: str, evidence: str, fallback: str) -> str:
+        """第一级知识命中后，用 Ollama 将检索证据润色组织为自然回答（方案A）
+
+        约束：严格依据证据作答，禁止编造；Ollama 不可用时回退为抽取式答案。
+        """
+        if not self._ollama_client or not HAS_OPENAI:
+            return fallback
+
+        sys_prompt = (
+            "你是海宁皮影戏数字人讲解员，名叫'海宁小状元'。"
+            "下面是从知识库检索到的原始资料，请严格依据资料回答用户的问题。\n"
+            "要求：\n"
+            "1. 只能使用资料中出现的信息，禁止编造、禁止延伸资料之外的内容；\n"
+            "2. 将信息组织成自然流畅的1-2段中文讲解，结构清晰、层次分明；\n"
+            "3. 若资料信息不足以回答，如实说明资料中提到了什么，不强行作答。"
+        )
+
+        user_content = f"用户问题：{query}\n\n参考资料：\n{evidence}"
+
+        try:
+            resp = self._ollama_client.chat.completions.create(
+                model=config.ACTION_MODEL,
+                messages=[
+                    {"role": "system", "content": sys_prompt},
+                    {"role": "user", "content": user_content},
+                ],
+                temperature=0.3,
+            )
+            polished = (resp.choices[0].message.content or "").strip()
+            if polished:
+                logger.info(f"[Skill] 润色完成: {polished[:80]}..." if len(polished) > 80 else f"[Skill] 润色完成: {polished}")
+                return polished
+            return fallback
+        except Exception as e:
+            logger.error(f"[Skill] 润色失败，使用抽取式答案: {e}")
+            return fallback
 
     async def _direct_llm_answer(self, query: str) -> str:
         """第三级：直接用 Ollama 模型回答（无知识库约束）"""

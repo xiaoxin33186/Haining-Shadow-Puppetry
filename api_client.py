@@ -4,6 +4,7 @@
 
 import json
 import httpx
+from pathlib import Path
 from typing import List, Dict, Optional, Any
 import logging
 
@@ -58,7 +59,54 @@ class ChatchatAPIClient:
 
     async def list_knowledge_bases(self) -> List[str]:
         result = await self._get("/knowledge_base/list_knowledge_bases")
-        return result.get("data", [])
+        data = result.get("data", [])
+        if isinstance(data, list):
+            names = []
+            for item in data:
+                if isinstance(item, dict) and item.get("kb_name"):
+                    names.append(item["kb_name"])
+            return names
+        return []
+
+    async def list_files(self, kb_name: str = None) -> List[str]:
+        kb_name = kb_name or config.KNOWLEDGE_BASE_NAME
+        params = {"knowledge_base_name": kb_name}
+        result = await self._get("/knowledge_base/list_files", params=params)
+        data = result.get("data", [])
+        if not isinstance(data, list):
+            return []
+        names = []
+        for item in data:
+            if isinstance(item, str):
+                names.append(item)
+            elif isinstance(item, dict) and item.get("file_name"):
+                names.append(item["file_name"])
+        return names
+
+    async def delete_docs(
+        self,
+        kb_name: str,
+        file_names: List[str],
+        delete_content: bool = True,
+        not_refresh_vs_cache: bool = False,
+    ) -> Dict:
+        data = {
+            "knowledge_base_name": kb_name,
+            "file_names": file_names,
+            "delete_content": delete_content,
+            "not_refresh_vs_cache": not_refresh_vs_cache,
+        }
+        return await self._post("/knowledge_base/delete_docs", data)
+
+    async def download_doc(self, kb_name: str, file_name: str, save_to: str) -> str:
+        kb_name = kb_name or config.KNOWLEDGE_BASE_NAME
+        url = f"{self.base_url}/knowledge_base/download_doc"
+        params = {"knowledge_base_name": kb_name, "file_name": file_name, "preview": False}
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            resp = await client.get(url, params=params)
+            resp.raise_for_status()
+            Path(save_to).write_bytes(resp.content)
+        return save_to
 
     async def create_knowledge_base(
         self,
@@ -78,18 +126,48 @@ class ChatchatAPIClient:
         self,
         kb_name: str,
         files: List[str],
-        chunk_size: int = 250,
-        chunk_overlap: int = 50,
+        override: bool = False,
+        to_vector_store: bool = True,
+        chunk_size: int = None,
+        chunk_overlap: int = None,
         zh_title_enhance: bool = True,
+        docs: Dict = None,
+        not_refresh_vs_cache: bool = False,
+        timeout: int = None,
     ) -> Dict:
-        data = {
+        """上传文件到知识库并向量化。
+
+        Chatchat 服务端的 /knowledge_base/upload_docs 是 multipart 表单接口
+        （files=文件字节 + 表单字段），不是 JSON。这里按真实接口发送。
+        """
+        url = f"{self.base_url}/knowledge_base/upload_docs"
+        form_data = {
             "knowledge_base_name": kb_name,
-            "files": files,
-            "chunk_size": chunk_size,
-            "chunk_overlap": chunk_overlap,
-            "zh_title_enhance": zh_title_enhance,
+            "override": str(override).lower(),
+            "to_vector_store": str(to_vector_store).lower(),
+            "zh_title_enhance": str(zh_title_enhance).lower(),
+            "docs": json.dumps(docs or {}, ensure_ascii=False),
+            "not_refresh_vs_cache": str(not_refresh_vs_cache).lower(),
         }
-        return await self._post("/knowledge_base/upload_docs", data)
+        if chunk_size is not None:
+            form_data["chunk_size"] = str(chunk_size)
+        if chunk_overlap is not None:
+            form_data["chunk_overlap"] = str(chunk_overlap)
+
+        upload_files = []
+        for path in files:
+            p = Path(path)
+            upload_files.append(("files", (p.name, p.read_bytes())))
+
+        timeout = timeout or self.timeout
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                resp = await client.post(url, data=form_data, files=upload_files)
+                resp.raise_for_status()
+                return resp.json()
+        except Exception as e:
+            logger.error(f"POST {url} 失败: {e}")
+            raise
 
     async def knowledge_base_chat(
         self,

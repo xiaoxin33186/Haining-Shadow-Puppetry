@@ -21,6 +21,10 @@ try:
 except ImportError:
     HAS_TKINTER = False
 
+# 显示系统输入法候选框（SDL IME UI）。
+# 必须在 import pygame / SDL 创建窗口（set_mode）之前设置，否则不生效。
+os.environ["SDL_IME_SHOW_UI"] = "1"
+
 import pygame
 import pygame.freetype
 
@@ -64,6 +68,10 @@ ACTION_MAP = {
     "向后走":   "back",
     "空闲":   "idle",
 }
+
+# 原地类动作（播放结束后人物归位到界面中央）；
+# 移动类动作（forward/back 向前走/向后走）结束后保持当前位置
+CENTER_RESET_ACTIONS = {"dance", "dun", "greet", "jump", "scratch", "normal", "idle"}
 FPS = 45
 
 REC_FS = 16000
@@ -99,6 +107,7 @@ RECOGNIZED_TEXT_DURATION = FPS * 4
 OUTPUT_FADE_DURATION = FPS // 3
 
 action_queue = queue.Queue()
+last_question_time = time.time()
 dh_system = None
 
 is_recording = False
@@ -219,7 +228,7 @@ def create_output_box(width, height):
 
 def process_and_enqueue(text: str):
 
-    global last_recognized_text, recognized_text_timer
+    global last_recognized_text, recognized_text_timer, last_question_time
     if not dh_system:
         print("[警告] Agent 系统未初始化，无法处理输入。")
         action_queue.put((['idle'], "Agent系统似乎出了一些问题。"))
@@ -230,10 +239,14 @@ def process_and_enqueue(text: str):
         print("[Agent] 输入为空，忽略。")
         return
 
+    last_question_time = time.time()
+
     try:
 
         acts, reply = asyncio.run(dh_system.process_input(text))
+        elapsed = time.time() - last_question_time
         print(f"[Agent] 输入: '{text}' -> 回复: '{reply}' | 动作: {acts}")
+        print(f"[计时] 提问到获取回复耗时: {elapsed:.2f} 秒")
 
         if not isinstance(acts, list):
             print(f"[警告] Agent 返回的动作不是列表: {acts}, 使用 'idle' 代替。")
@@ -445,7 +458,7 @@ def load_frames(json_list):
     return frames, init_joints, w, h
 
 def pygame_loop():
-    global is_recording, last_recognized_text, recognized_text_timer, input_text, typing
+    global is_recording, last_recognized_text, recognized_text_timer, input_text, typing, ime_composing_text
 
     print("初始化 Pygame 及资源...")
     pygame.init()
@@ -541,6 +554,7 @@ def pygame_loop():
     text_reply = ""
     typing = False
     input_text = ""
+    ime_composing_text = ""  # 输入法组合中的拼音（TEXTEDITING 事件）
     input_mode = "text" # 当前输入模式: "text" 或 "voice"
 
     initial_pelvis_original = initial_joints_idle_original.get('pelvis', {'x': 0, 'y': 0})
@@ -573,11 +587,14 @@ def pygame_loop():
                             if not typing:
                                 typing = True
                                 input_text = ""
+                                ime_composing_text = ""
                                 pygame.key.start_text_input()
+                                pygame.key.set_text_input_rect(input_box_rect)  # 候选框跟随输入框
                                 print("输入框已激活。")
                         elif typing:
                             typing = False
                             pygame.key.stop_text_input()
+                            ime_composing_text = ""
                             print("输入框已取消激活。")
 
 
@@ -589,6 +606,7 @@ def pygame_loop():
                                 typing = False
                                 pygame.key.stop_text_input()
                                 input_text = ""
+                                ime_composing_text = ""
                         else:
                             input_mode = "text"
                             print("切换到 -> 文字模式")
@@ -605,10 +623,13 @@ def pygame_loop():
                      typing = not typing
                      if typing:
                          input_text = ""
+                         ime_composing_text = ""
                          pygame.key.start_text_input()
+                         pygame.key.set_text_input_rect(input_box_rect)  # 候选框跟随输入框
                          print("输入框已激活 (Tab)。")
                      else:
                          pygame.key.stop_text_input()
+                         ime_composing_text = ""
                          print("输入框已取消激活 (Tab)。")
                          if input_text.strip():
                              print(f"提交文本 (Tab): {input_text.strip()}")
@@ -620,6 +641,7 @@ def pygame_loop():
                         print(f"提交文本 (Enter): {input_text.strip()}")
                         pygame.key.stop_text_input()
                         typing = False
+                        ime_composing_text = ""
                         if input_text.strip():
                             threading.Thread(target=process_and_enqueue, args=(input_text.strip(),), daemon=True).start()
                         input_text = ""
@@ -630,6 +652,7 @@ def pygame_loop():
                         typing = False
                         pygame.key.stop_text_input()
                         input_text = ""
+                        ime_composing_text = ""
                     elif ev.key == pygame.K_v and pygame.key.get_mods() & pygame.KMOD_CTRL:
                         try:
                             if _tk_root:
@@ -647,6 +670,9 @@ def pygame_loop():
 
             elif ev.type == pygame.TEXTINPUT and typing and input_mode == "text":
                 input_text += ev.text
+
+            elif ev.type == pygame.TEXTEDITING and typing and input_mode == "text":
+                ime_composing_text = ev.text
 
         if not running: break
         if state == 'idle' and not action_queue.empty():
@@ -708,6 +734,9 @@ def pygame_loop():
                         'x': last_frame_pelvis_relative['x'] + action_offset['x'],
                         'y': last_frame_pelvis_relative['y'] + action_offset['y'],
                     }
+                    # 边界钳制：动作结束后的位置不得越出窗口（防连续"向前走/向后走"走出界面）
+                    last_pelvis_abs['x'] = max(0.0, min(float(w), last_pelvis_abs['x']))
+                    last_pelvis_abs['y'] = max(0.0, min(float(h), last_pelvis_abs['y']))
                     state = 'action'
                     action_idx = 0
                     output_visible = bool(text_reply)
@@ -762,6 +791,10 @@ def pygame_loop():
 
             if action_idx >= len(action_frames):
                 print("Action 播放完毕，返回 Idle。")
+                # 原地类动作（跳舞/行礼等）结束后人物归位到界面中央；
+                # 移动类动作（向前走/向后走）结束后保持移动后的位置
+                if json_list and Path(json_list[0]).stem in CENTER_RESET_ACTIONS:
+                    last_pelvis_abs = {'x': center_x, 'y': center_y}
                 state = 'idle'
                 idle_idx = 0
 
@@ -769,8 +802,9 @@ def pygame_loop():
         if frame_joint_data_original:
             joints_for_render = {
                 joint_name: {
-                    'x': original_pos['x'] + current_offset['x'],
-                    'y': original_pos['y'] + current_offset['y'],
+                    # 边界钳制：任何关节渲染坐标不越出窗口
+                    'x': max(0.0, min(float(w), original_pos['x'] + current_offset['x'])),
+                    'y': max(0.0, min(float(h), original_pos['y'] + current_offset['y'])),
                 }
                 for joint_name, original_pos in frame_joint_data_original.items()
                 if original_pos
@@ -858,8 +892,14 @@ def pygame_loop():
 
              if typing:
                  input_font.render_to(screen, (text_render_x, text_render_y), input_text, UI_COLORS["text"])
+                 if ime_composing_text:
+                     comp_x = text_render_x + input_font.get_rect(input_text).width
+                     prev_underline = input_font.underline
+                     input_font.underline = True
+                     input_font.render_to(screen, (comp_x, text_render_y), ime_composing_text, UI_COLORS["text"])
+                     input_font.underline = prev_underline
                  if int(time.time() * 2) % 2 == 0:
-                     text_surface, text_rect = input_font.render(input_text)
+                     text_surface, text_rect = input_font.render(input_text + ime_composing_text)
                      cursor_x = text_render_x + text_rect.width + 1
                      cursor_y1 = text_render_y
                      cursor_y2 = text_render_y + input_font.get_sized_height(18)

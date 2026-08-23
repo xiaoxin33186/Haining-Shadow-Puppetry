@@ -74,9 +74,12 @@ def get_config_dict(
         log_level: str, log_file_path: str, log_backup_count: int, log_max_bytes: int
 ) -> dict:
     # for windows, the path should be a raw string.
+    # NOTE: unicode-escape will corrupt non-ASCII (e.g. Chinese) paths into
+    # literal "\uXXXX" escapes on Windows, breaking log file creation.
+    # Only escape ASCII paths; keep non-ASCII paths untouched.
     log_file_path = (
         log_file_path.encode("unicode-escape").decode()
-        if os.name == "nt"
+        if os.name == "nt" and log_file_path.isascii()
         else log_file_path
     )
     log_level = log_level.upper()
