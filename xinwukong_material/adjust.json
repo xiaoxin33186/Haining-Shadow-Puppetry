@@ -1,0 +1,111 @@
+{
+  "parts": {
+    "body": [
+      65,
+      0,
+      10.126582278481123,
+      -29.58227848101268
+    ],
+    "head": [
+      77,
+      0,
+      -16.45569620253164,
+      -56.96202531645569
+    ],
+    "right_hip": [
+      55,
+      0,
+      10.126582278481028,
+      -22.784810126582286
+    ],
+    "right_knee": [
+      50,
+      1,
+      -1.2658227848101162,
+      -12.65822784810136
+    ],
+    "left_hip": [
+      44,
+      0,
+      8.860759493670919,
+      -8.860759493670873
+    ],
+    "left_knee": [
+      46,
+      -2,
+      10.126582278481008,
+      -2.5316455696202613
+    ],
+    "right_elbow": [
+      39,
+      0,
+      21.518987341772068,
+      -17.721518987341792
+    ],
+    "right_wrist": [
+      51,
+      0,
+      -31.645569620253305,
+      -1.2658227848101133
+    ],
+    "left_elbow": [
+      38,
+      0,
+      -34.177215189873436,
+      1.7319479184152442e-14
+    ],
+    "left_wrist": [
+      47,
+      0,
+      13.924050632911381,
+      10.126582278481056
+    ]
+  },
+  "rot": {
+    "body": 0.0,
+    "head": 0.0,
+    "right_hip": 0.0,
+    "right_knee": 0.0,
+    "left_hip": 0.0,
+    "left_knee": 0.0,
+    "right_elbow": 14.0,
+    "right_wrist": -8.0,
+    "left_elbow": -35.5,
+    "left_wrist": 291.5
+  },
+  "mirror": {
+    "body": false,
+    "head": false,
+    "right_hip": false,
+    "right_knee": false,
+    "left_hip": false,
+    "left_knee": false,
+    "right_elbow": false,
+    "right_wrist": true,
+    "left_elbow": false,
+    "left_wrist": true
+  },
+  "draw": {
+    "body": 3,
+    "head": 2,
+    "right_hip": 1,
+    "right_knee": 3,
+    "left_hip": 1,
+    "left_knee": 3,
+    "right_elbow": 4,
+    "right_wrist": 4,
+    "left_elbow": 3,
+    "left_wrist": 4
+  },
+  "pivot": {
+    "left_knee": [
+      46,
+      -2
+    ],
+    "right_knee": [
+      50,
+      1
+    ]
+  },
+  "scene_mirror": false
+}

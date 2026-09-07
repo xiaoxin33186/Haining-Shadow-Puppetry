@@ -33,6 +33,18 @@ import sounddevice as sd
 import numpy as np
 from vosk import Model, KaldiRecognizer
 
+# [TTS] 本地 Piper 语音合成
+try:
+    import tts_engine
+    HAS_TTS = tts_engine.is_available()
+except Exception as e:
+    HAS_TTS = False
+    tts_engine = None
+if HAS_TTS:
+    print("[TTS] 本地 Piper 语音合成已就绪")
+else:
+    print("[TTS] Piper 未安装（C:\\piper-tts），语音播报禁用")
+
 # [CHATCHAT] Chatchat 后端对接开关：True=使用 LangChain-Chatchat，False=使用原 AutoGen
 USE_CHATCHAT = True  # [CHATCHAT]
 # [HYBRID] 三级混合检索开关：True=Skill优先+Chatchat兜底+模型直答，False=纯Chatchat
@@ -405,12 +417,13 @@ def load_frames(json_list):
 
         for fr in cur:
             j = fr.get('joints', {})
-            if 'right_elbow' in j:     j['right_elbow']['y'] += 15
-            if 'left_elbow'  in j:     j['left_elbow']['y']  += 15
-            if 'right_shoulder' in j and 'left_shoulder' in j:
-                mid = (j['right_shoulder']['x'] + j['left_shoulder']['x']) / 2
-                j['right_shoulder']['x'], j['left_shoulder']['x'] = mid - 30, mid
-                j['left_shoulder']['x'] = mid
+            if pg_base.uses_joint_fix():
+                if 'right_elbow' in j:     j['right_elbow']['y'] += 15
+                if 'left_elbow'  in j:     j['left_elbow']['y']  += 15
+                if 'right_shoulder' in j and 'left_shoulder' in j:
+                    mid = (j['right_shoulder']['x'] + j['left_shoulder']['x']) / 2
+                    j['right_shoulder']['x'], j['left_shoulder']['x'] = mid - 30, mid
+                    j['left_shoulder']['x'] = mid
 
         if first:
             first_frame = cur[0] if cur else {}
@@ -512,11 +525,7 @@ def pygame_loop():
     try:
         mats = pg_base.load_materials()
         print(f"加载角色素材.{mats}")
-        for part, img in mats.items():
-             if part in pg_base.PART_PARAM:
-                 mw, mh = img.get_size()
-                 pg_base.PART_PARAM[part][0] = mw // 2
-                 pg_base.PART_PARAM[part][1] = 0
+        pg_base.finalize_pivots(mats)
         print(f"角色素材加载成功 ({len(mats)} 个部位)。")
     except Exception as e:
         print(f"[错误] 加载角色素材失败: {e}")
@@ -678,6 +687,8 @@ def pygame_loop():
         if state == 'idle' and not action_queue.empty():
             acts, reply = action_queue.get()
             text_reply = reply
+            if HAS_TTS and reply and reply.strip():
+                tts_engine.speak_async(reply)  # TTS 播报
 
             json_list = []
             valid_action_found = False

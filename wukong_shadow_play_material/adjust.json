@@ -1,0 +1,102 @@
+{
+  "parts": {
+    "body": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "head": [
+      0,
+      0,
+      -5,
+      -60
+    ],
+    "right_hip": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "right_knee": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "left_hip": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "left_knee": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "right_elbow": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "right_wrist": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "left_elbow": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "left_wrist": [
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  "rot": {
+    "body": 0.0,
+    "head": 0.0,
+    "right_hip": 0.0,
+    "right_knee": 0.0,
+    "left_hip": 0.0,
+    "left_knee": 0.0,
+    "right_elbow": 0.0,
+    "right_wrist": 0.0,
+    "left_elbow": 0.0,
+    "left_wrist": 0.0
+  },
+  "mirror": {
+    "body": false,
+    "head": false,
+    "right_hip": false,
+    "right_knee": false,
+    "left_hip": false,
+    "left_knee": false,
+    "right_elbow": false,
+    "right_wrist": false,
+    "left_elbow": false,
+    "left_wrist": false
+  },
+  "draw": {
+    "body": 3,
+    "head": 2,
+    "right_hip": 1,
+    "right_knee": 3,
+    "left_hip": 1,
+    "left_knee": 3,
+    "right_elbow": 4,
+    "right_wrist": 4,
+    "left_elbow": 1,
+    "left_wrist": 2
+  },
+  "pivot": {},
+  "scene_mirror": false
+}

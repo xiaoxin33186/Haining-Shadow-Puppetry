@@ -78,3 +78,5 @@ unused_items/
 # 启动脚本含本机 conda 路径，勿上传
 start_project.bat
 start_kb_sync.bat
+pivot_config.json
+pivot_config_backup.json
