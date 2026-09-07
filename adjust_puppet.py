@@ -211,7 +211,7 @@ def main():
         out = rotated.subsurface((x0, y0, x1 - x0 + 1, y1 - y0 + 1)).copy()
         new_px = npivx - x0
         new_py = npivy - y0
-        path = os.path.join("xinwukong_material", p + ".png")
+        path = str(base.MATERIAL_ROOT / (p + ".png"))
         pygame.image.save(out, path)
         mats[p] = out
         base.PART_PARAM[p][0] = new_px
