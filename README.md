@@ -34,15 +34,15 @@ ollama pull gemma3:4b
 
 ### 2. VOSK 中文语音识别模型
 
-- 访问 [VOSK Models](https://alphacephei.com/vosk/models)
-- 下载名为 `vosk-model-cn-0.22` 的模型
-- 将解压后的模型文件夹放置到项目的 `model-cn/` 目录下：
+语音模型 `vosk-model-small-cn-0.22` **已随仓库提供**，位于：
 
 ```
 project_root/
 ├── model-cn/
-│   └── vosk-model-cn-0.22/
+│   └── vosk-model-small-cn-0.22/
 ```
+
+若该目录缺失（或需更换模型），可访问 [VOSK Models](https://alphacephei.com/vosk/models) 下载后解压到 `model-cn/` 下，并保证目录名与 `main.py` 顶部 `VOSK_MODEL_PATH` 一致。
 
 ### 3. 语言模式
 
@@ -224,7 +224,7 @@ flowchart TD
 pip install aiofiles==25.1.0 annotated-types==0.7.0 anyio==4.14.1 autogen-agentchat==0.7.5 autogen-core==0.7.5 autogen-ext==0.7.5 certifi==2026.6.17 cffi==2.0.0 charset-normalizer==3.4.7 colorama==0.4.6 distro==1.9.0 et_xmlfile==2.0.0 h11==0.16.0 httpcore==1.0.9 httpx==0.28.1 idna==3.18 jiter==0.16.0 jsonref==1.1.0 numpy==2.5.0 ollama==0.6.2 openai==2.44.0 openpyxl==3.1.5 opentelemetry-api==1.43.0 packaging==26.0 pillow==12.2.0 pip==26.1.2 protobuf==5.29.6 pycparser==3.0 pydantic==2.13.4 pydantic_core==2.46.4 pygame==2.6.1 regex==2026.6.28 requests==2.34.2 setuptools==82.0.1 sniffio==1.3.1 sounddevice==0.5.5 srt==3.5.3 tiktoken==0.13.0 tqdm==4.68.3 typing_extensions==4.15.0 typing-inspection==0.4.2 urllib3==2.7.0 vosk==0.3.45 websockets==16.0 wheel==0.47.0 xlrd==2.0.2
 ```
 
-> 语音识别模型 `vosk-model-small-cn-0.22` 不随仓库提供，请从 [VOSK Models](https://alphacephei.com/vosk/models) 下载后解压到 `model-cn/` 目录。
+> 语音识别模型 `vosk-model-small-cn-0.22` **已随仓库提供**（`model-cn/`）；如缺失，可从 [VOSK Models](https://alphacephei.com/vosk/models) 下载后解压到 `model-cn/` 目录。
 
 ## Langchain-Chatchat 本地知识库环境
 

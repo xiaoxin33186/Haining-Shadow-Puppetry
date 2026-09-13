@@ -53,8 +53,6 @@ Thumbs.db
 
 # Jupyter
 .ipynb_checkpoints/
-#忽略本地测试常用文件（语音模型体积大，可从 VOSK 官网下载）
-model-cn/
 
 # 内嵌仓库备份（勿提交）
 **/.git_backup/
@@ -96,6 +94,9 @@ share_cards/
 
 # AI 会话工作存档（仅本地留存，勿提交）
 /2026-*_AI会话工作存档*.md
+
+# 上传规范与清单（仅本地留存，勿提交）
+/Git上传规范与本次上传清单.md
 
 # 根目录集成说明与 piper/集成说明.md 重复，仅提交 piper/ 下那份
 /集成说明.md

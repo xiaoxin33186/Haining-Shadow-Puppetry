@@ -1,1 +1,4 @@
 * text=auto eol=lf
+
+# 语音识别模型为二进制，禁止文本转换
+model-cn/** binary
