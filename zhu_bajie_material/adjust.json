@@ -1,0 +1,127 @@
+{
+  "parts": {
+    "body": [
+      97,
+      0,
+      -21.518987341772153,
+      -5.773159728050814e-15
+    ],
+    "head": [
+      58,
+      0,
+      7.59493670886075,
+      39.24050632911392
+    ],
+    "right_hip": [
+      55,
+      0,
+      -17.721518987341774,
+      -11.392405063291136
+    ],
+    "right_knee": [
+      60,
+      8,
+      6.329113924050638,
+      -30.379746835443033
+    ],
+    "left_hip": [
+      55,
+      0,
+      -6.329113924050607,
+      13.924050632911396
+    ],
+    "left_knee": [
+      21,
+      5,
+      -10.126582278481008,
+      -18.987341772151893
+    ],
+    "right_elbow": [
+      -2,
+      94,
+      -24.050632911392455,
+      78.48101265822783
+    ],
+    "right_wrist": [
+      41,
+      76,
+      46.8354430379745,
+      55.696202531645554
+    ],
+    "left_elbow": [
+      71,
+      92,
+      49.36708860759495,
+      63.29113924050634
+    ],
+    "left_wrist": [
+      3,
+      68,
+      31.645569620253212,
+      69.62025316455694
+    ]
+  },
+  "rot": {
+    "body": 0.0,
+    "head": 0.0,
+    "right_hip": 0.0,
+    "right_knee": 3.0,
+    "left_hip": 0.0,
+    "left_knee": 0.5,
+    "right_elbow": 16.0,
+    "right_wrist": -31.0,
+    "left_elbow": -29.0,
+    "left_wrist": -38.5
+  },
+  "mirror": {
+    "body": false,
+    "head": false,
+    "right_hip": false,
+    "right_knee": false,
+    "left_hip": false,
+    "left_knee": false,
+    "right_elbow": false,
+    "right_wrist": false,
+    "left_elbow": false,
+    "left_wrist": false
+  },
+  "draw": {
+    "body": 3,
+    "head": 2,
+    "right_hip": 1,
+    "right_knee": 3,
+    "left_hip": 1,
+    "left_knee": 3,
+    "right_elbow": 4,
+    "right_wrist": 4,
+    "left_elbow": 5,
+    "left_wrist": 5
+  },
+  "pivot": {
+    "right_knee": [
+      60,
+      8
+    ],
+    "left_knee": [
+      21,
+      5
+    ],
+    "left_elbow": [
+      71,
+      92
+    ],
+    "left_wrist": [
+      3,
+      68
+    ],
+    "right_wrist": [
+      41,
+      76
+    ],
+    "right_elbow": [
+      -2,
+      94
+    ]
+  },
+  "scene_mirror": false
+}

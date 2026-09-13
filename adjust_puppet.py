@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-import os, json
+import os, json, math
 from pathlib import Path
 import pygame
 
@@ -101,6 +101,7 @@ def main():
     cycle_mode = False
     show_all = False
     show_map = True
+    big_star = False
     msg = ""
     clock = pygame.time.Clock()
 
@@ -116,8 +117,36 @@ def main():
         nonlocal frames, adj
         frames, adj = load_action(str(Path("actions") / ACTION_FILES[action_idx]), sw, sh)
 
+    def _dist(p1, p2):
+        return math.hypot(p1["x"] - p2["x"], p1["y"] - p2["y"])
+
+    def build_big():
+        j = {k: dict(v) for k, v in adj.items()}
+        for side in ("right", "left"):
+            o = -1 if side == "right" else 1
+            s = adj.get(side + "_shoulder"); e = adj.get(side + "_elbow"); w = adj.get(side + "_wrist")
+            if s and e and w:
+                L1 = _dist(s, e); L2 = _dist(e, w)
+                a = math.radians(-15)
+                ux, uy = o * math.cos(a), -math.sin(a)
+                j[side + "_elbow"] = {"x": s["x"] + ux * L1, "y": s["y"] + uy * L1}
+                j[side + "_wrist"] = {"x": j[side + "_elbow"]["x"] + ux * L2,
+                                      "y": j[side + "_elbow"]["y"] + uy * L2}
+            h = adj.get(side + "_hip"); k = adj.get(side + "_knee"); an = adj.get(side + "_ankle")
+            if h and k and an:
+                L3 = _dist(h, k); L4 = _dist(k, an)
+                mag = math.hypot(0.6 * o, 1.15)
+                ux, uy = 0.6 * o / mag, 1.15 / mag
+                j[side + "_knee"] = {"x": h["x"] + ux * L3, "y": h["y"] + uy * L3}
+                j[side + "_ankle"] = {"x": j[side + "_knee"]["x"] + ux * L4,
+                                      "y": j[side + "_knee"]["y"] + uy * L4}
+        return j
+
+    def cur_joints():
+        return build_big() if big_star else frames[idx]["joints"]
+
     def disp_anchor(p):
-        raw = anchor_screen(p, adj, sw, sh)
+        raw = anchor_screen(p, cur_joints(), sw, sh)
         if not raw:
             return None
         x, y = raw
@@ -146,7 +175,7 @@ def main():
         return (x0, y0, pw, ph, z, dx, dy, iw, ih)
 
     def joint_screen(name):
-        p = adj.get(name)
+        p = cur_joints().get(name)
         if not p:
             return None
         sx = (p["x"] - sw // 2) * base.SCALE_FACTOR + sw // 2
@@ -280,7 +309,7 @@ def main():
         ch = base.CHAR_DISPLAY.get(base.CURRENT_CHARACTER, base.CURRENT_CHARACTER)
         play_st = "▶ 播放" if not paused else "⏸ 暂停"
         cyc = " [C:轮播开]" if cycle_mode else " [C:轮播关]"
-        line1 = f"角色:{ch}  动作:{a}  {play_st}  帧 {idx}/{len(frames)}   空格=播放/暂停  ,/.=逐帧  [ ]=换动作  Tab=切角色{cyc}"
+        line1 = f"角色:{ch}  动作:{a}  {play_st}  帧 {idx}/{len(frames)}   空格=播放/暂停  ,/.=逐帧  [ ]=换动作  Tab=切角色  D=大字校准{cyc}"
         line2 = "左键点选; 左键拖=移动  右键拖=旋转  Q/E=旋转 方向键=微移  M=本件镜像  L=全部镜像"
         line3 = "PgUp/PgDn=图层  1-0选件  R=复位  B=全部回初始  O=自动竖直  X=烘焙入素材  -=缩放  F=朝向  V=全标记  Y=示意图"
         line3b = "S保存 ESC退出 窗口可拉伸; 定枢轴: 右上原图面板点真实关节; 灰线=该段骨架轴"
@@ -326,6 +355,10 @@ def main():
                 elif e.key == pygame.K_y:
                     show_map = not show_map
                     msg = "结构示意图 开" if show_map else "结构示意图 关"
+                elif e.key == pygame.K_d:
+                    big_star = not big_star
+                    paused = True
+                    msg = "大字校准姿势 开（四肢摊开，逐段校准枢轴/重叠；不影响任何动作文件）" if big_star else "大字校准姿势 关（回到当前动作）"
                 elif e.key == pygame.K_TAB:
                     char_idx = (char_idx + 1) % len(base.CHARACTERS)
                     name = base.CHARACTERS[char_idx]
@@ -450,7 +483,7 @@ def main():
                     base.ROT_OFF[selected] = round(base.ROT_OFF[selected] + ang, 2)
                 last_mouse = e.pos
 
-        base.render(screen, bg, mats, frames[idx]["joints"], adj, 0)
+        base.render(screen, bg, mats, cur_joints(), adj, 0)
 
         for p in PART_ORDER:
             a = disp_anchor(p)

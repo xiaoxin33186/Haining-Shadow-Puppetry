@@ -52,11 +52,14 @@ CHAR_DISPLAY = {
     "xinwukong_material": "新悟空",
     "wukong_shadow_play_material": "悟空",
     "shadow_play_material": "海宁通用",
-    "怪物_material": "怪物",
+    "bull_demon_king_material": "牛魔王",
+    "sha_wujing_material": "沙僧",
+    "zhu_bajie_material": "猪八戒",
 }
 
 def _candidate_dirs():
-    known = ["xinwukong_material", "wukong_shadow_play_material", "shadow_play_material"]
+    known = ["xinwukong_material", "wukong_shadow_play_material", "shadow_play_material",
+             "bull_demon_king_material", "sha_wujing_material", "zhu_bajie_material"]
     found = []
     try:
         for d in sorted(os.listdir(PROJECT)):
@@ -184,6 +187,71 @@ def finalize_pivots(mats):
             PART_PARAM[part][0] = img.get_width() // 2
             PART_PARAM[part][1] = 0
 
+
+# ===== 双人偶渲染支持：按角色保存/恢复渲染配置 =====
+
+def capture_config():
+    """返回当前角色的渲染配置快照（枢轴/旋转/镜像/绘制顺序/镜像场景）。
+
+    供双人偶同时渲染时，每个 render() 调用前按各自角色的快照恢复配置。
+    """
+    return {
+        "part_param": {p: list(PART_PARAM[p]) for p in PART_PARAM},
+        "rot_off": dict(ROT_OFF),
+        "part_mirror": dict(PART_MIRROR),
+        "draw_order": dict(DRAW_ORDER),
+        "scene_mirror": SCENE_MIRROR,
+    }
+
+
+def apply_config(cfg):
+    """把 capture_config() 得到的快照恢复到全局渲染配置。"""
+    if not cfg:
+        return
+    if "part_param" in cfg:
+        for p in PART_PARAM:
+            if p in cfg["part_param"]:
+                PART_PARAM[p] = list(cfg["part_param"][p])
+    if "rot_off" in cfg:
+        for p in ROT_OFF:
+            ROT_OFF[p] = cfg["rot_off"].get(p, 0.0)
+    if "part_mirror" in cfg:
+        for p in PART_MIRROR:
+            PART_MIRROR[p] = bool(cfg["part_mirror"].get(p, False))
+    if "draw_order" in cfg:
+        for p in DRAW_ORDER:
+            DRAW_ORDER[p] = cfg["draw_order"].get(p, 0)
+    global SCENE_MIRROR
+    SCENE_MIRROR = bool(cfg.get("scene_mirror", False))
+
+
+def character_setup(name):
+    """为指定角色安装配置并返回 (素材, 渲染配置快照)；不改变 current_character.txt。
+
+    双人偶需要同时用两套角色配置渲染；本函数临时切换配置读取目标角色的
+    素材与枢轴参数，随后恢复原配置，避免污染正在使用本模块的主流程。
+    """
+    if name not in CHARACTERS:
+        print(f"[双人偶] 警告: 角色 '{name}' 不在可用素材列表 CHARACTERS 中。")
+        return None
+    saved_char, saved_material, saved_cfg_path = CURRENT_CHARACTER, MATERIAL_ROOT, CONFIG_PATH
+    saved = capture_config()
+    globals()["CURRENT_CHARACTER"] = name
+    globals()["MATERIAL_ROOT"] = PROJECT / name
+    globals()["CONFIG_PATH"] = (PROJECT / name) / "adjust.json"
+    _reset_config_defaults()
+    _load_config_file(CONFIG_PATH)
+    try:
+        mats = load_materials()
+        finalize_pivots(mats)
+        cfg = capture_config()
+    finally:
+        globals()["CURRENT_CHARACTER"] = saved_char
+        globals()["MATERIAL_ROOT"] = saved_material
+        globals()["CONFIG_PATH"] = saved_cfg_path
+        apply_config(saved)
+    return mats, cfg
+
 PART_CONNECT = {
     "body": ("upper_neck", "pelvis"),
     "head": ("head_top", "upper_neck"),
@@ -237,8 +305,21 @@ def rotate_bound_pg(img, angle_cw, pivot_x, pivot_y):
     move_y = nH / 2 + (dx * math.sin(rad) + dy * math.cos(rad))
     return rotated, move_x, move_y
 
-def render(surface, bg, mats, joints, adjusted_initial_joints, frame_idx):
-    surface.blit(bg, (0, 0))
+def render(surface, bg, mats, joints, adjusted_initial_joints, frame_idx,
+           cfg=None, draw_bg=True, mirror=None):
+    if cfg is not None:
+        apply_config(cfg)
+    # 整体水平镜像：mirror=None 用角色配置(SCENE_MIRROR)，True/False 强制指定
+    # （双人偶对峙时，第二人偶强制取第一人偶的反向朝向）
+    scene_mirror = SCENE_MIRROR if mirror is None else bool(mirror)
+    # 镜像绕角色自身中心翻转（而不是整屏中心），保证位置不变、只反转朝向。
+    # 注意 joints 已是加了站位偏移的渲染坐标，翻转中心必须用当前帧 pelvis，
+    # 否则会把第二人偶（偏右侧）绕原点翻回第一人偶处造成重叠
+    mirror_center_x = (joints.get("pelvis")
+                       or adjusted_initial_joints.get("pelvis")
+                       or {}).get("x", surface.get_width() // 2)
+    if draw_bg:
+        surface.blit(bg, (0, 0))
     font = pygame.font.SysFont(None, 20)
 
     if DEBUG_MODE:
@@ -264,8 +345,8 @@ def render(surface, bg, mats, joints, adjusted_initial_joints, frame_idx):
         dx = p1_cur["x"] - p1_base["x"]
         dy = p1_cur["y"] - p1_base["y"]
 
-        first_x = p1_base["x"] + dx + x_off
-        first_y = p1_base["y"] + dy + y_off
+        world_x = p1_base["x"] + dx + x_off
+        world_y = p1_base["y"] + dy + y_off
 
         ang = get_angle(
             p1_cur["x"], p1_cur["y"],
@@ -280,27 +361,30 @@ def render(surface, bg, mats, joints, adjusted_initial_joints, frame_idx):
 
         mvx *= SCALE_FACTOR
         mvy *= SCALE_FACTOR
-        first_x = (first_x - surface.get_width() // 2) * SCALE_FACTOR + surface.get_width() // 2
-        first_y = (first_y - surface.get_height() // 2+65) * SCALE_FACTOR + surface.get_height() // 2
+        # 整体镜像：绕角色自身中心水平翻转世界坐标（位置不变、朝向反转）
+        if scene_mirror:
+            world_x = 2 * mirror_center_x - world_x
+        first_x = (world_x - surface.get_width() // 2) * SCALE_FACTOR + surface.get_width() // 2
+        first_y = (world_y - surface.get_height() // 2 + 65) * SCALE_FACTOR + surface.get_height() // 2
 
-        if SCENE_MIRROR:
-            first_x_m = surface.get_width() - first_x
+        if scene_mirror:
             flipped = pygame.transform.flip(rotated, True, False)
-            surface.blit(flipped, (first_x_m - (new_w - mvx), first_y - mvy))
+            surface.blit(flipped, (first_x - (new_w - mvx), first_y - mvy))
         else:
             surface.blit(rotated, (first_x - mvx, first_y - mvy))
 
         if SHOW_PIVOTS:
-            px_show = surface.get_width() - first_x if SCENE_MIRROR else first_x
+            px_show = first_x
             pygame.draw.circle(surface, (0, 255, 255), (int(px_show), int(first_y)), 5)
             surface.blit(font.render(part, True, (0, 255, 255)), (int(px_show) + 6, int(first_y) - 6))
 
     if SHOW_JOINTS:
         for name, pos in joints.items():
-            sx = (pos["x"] - surface.get_width() // 2) * SCALE_FACTOR + surface.get_width() // 2
+            jx = pos["x"]
+            if scene_mirror:
+                jx = 2 * mirror_center_x - jx
+            sx = (jx - surface.get_width() // 2) * SCALE_FACTOR + surface.get_width() // 2
             sy = (pos["y"] - surface.get_height() // 2 + 65) * SCALE_FACTOR + surface.get_height() // 2
-            if SCENE_MIRROR:
-                sx = surface.get_width() - sx
             pygame.draw.circle(surface, (255, 0, 0), (int(sx), int(sy)), 4)
             surface.blit(font.render(name, True, (255, 0, 0)), (int(sx) + 6, int(sy) - 6))
 

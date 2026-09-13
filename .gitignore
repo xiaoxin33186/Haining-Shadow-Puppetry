@@ -78,5 +78,24 @@ unused_items/
 # 启动脚本含本机 conda 路径，勿上传
 start_project.bat
 start_kb_sync.bat
+调整皮影人.bat
 pivot_config.json
 pivot_config_backup.json
+
+# 分享卡片成品（预制底图 card_templates/ 需提交，成品不入库）
+share_cards/
+
+# 他人改进版/参考目录（体积大，勿提交）
+别人的改进的/
+
+# 原始大图目录（不入库；需重生成素材请自行保留原图）
+新孙悟空/
+怪物/
+沙僧/
+猪八戒/
+
+# AI 会话工作存档（仅本地留存，勿提交）
+/2026-*_AI会话工作存档*.md
+
+# 根目录集成说明与 piper/集成说明.md 重复，仅提交 piper/ 下那份
+/集成说明.md

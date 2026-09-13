@@ -4,11 +4,13 @@
 用法:
     python prepare_character.py <原始目录> <输出目录名>
 示例:
-    python prepare_character.py 怪物 怪物_material
+    python prepare_character.py 沙僧 sha_wujing_material
+    python prepare_character.py 怪物 bull_demon_king_material
 
+输出目录名与部件 PNG 一律英文命名。
 支持两种命名习惯:
   A) 上/下分段的: 右胳膊 右手 右腿上 右腿下 左腿上 左腿下 ... (同"新孙悟空")
-  B) 每侧独立命名的: 头 身体 右/左胳膊 右/左手 右/左腿 右/左脚 ... (同"怪物")
+  B) 每侧独立命名的: 头 身体 右/左胳膊 右/左手 右/左腿(或大腿) 右/左脚 ... (同"牛魔王""沙僧")
 同一侧缺图时自动用对侧镜像补齐。
 """
 import os, sys, json

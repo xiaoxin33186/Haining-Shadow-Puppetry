@@ -1,0 +1,203 @@
+{
+  "plays": [
+    {
+      "name": "闹龙宫",
+      "title": "闹龙宫",
+      "theme": "西游记",
+      "scenes": [
+        {
+          "scene_id": 1,
+          "title": "龙宫借宝",
+          "description": "孙悟空前往东海龙宫向龙王借兵器",
+          "lines": [
+            {"speaker": "旁白", "text": "孙悟空来到东海龙宫，金箍棒闪闪发光。", "action": "idle", "duration": 3.0},
+            {"speaker": "孙悟空", "text": "老龙王，借俺老孙一件趁手兵器！", "action": "greet", "duration": 2.5},
+            {"speaker": "龙王", "text": "大圣请随我来，看看这些兵器如何。", "action": "forward", "duration": 2.0},
+            {"speaker": "孙悟空", "text": "太轻太轻，都不中用！", "action": "scratch", "duration": 2.5}
+          ]
+        },
+        {
+          "scene_id": 2,
+          "title": "得宝金箍棒",
+          "description": "孙悟空发现定海神针，并将其变为金箍棒",
+          "lines": [
+            {"speaker": "旁白", "text": "孙悟空看到一根大铁柱，上面写着‘如意金箍棒’。", "action": "idle", "duration": 3.0},
+            {"speaker": "孙悟空", "text": "好宝贝！变细些！", "action": "dance", "duration": 2.0},
+            {"speaker": "龙王", "text": "大圣且慢，那是定海神针！", "action": "back", "duration": 2.5},
+            {"speaker": "孙悟空", "text": "哈哈，今儿归俺老孙了！", "action": "jump", "duration": 2.5}
+          ]
+        },
+        {
+          "scene_id": 3,
+          "title": "龙宫震荡",
+          "description": "孙悟空挥舞金箍棒，龙宫摇动",
+          "lines": [
+            {"speaker": "旁白", "text": "金箍棒挥动，龙宫天翻地覆。", "action": "idle", "duration": 3.0},
+            {"speaker": "孙悟空", "text": "老龙王，借你宝地练练手！", "action": "dance", "duration": 2.5},
+            {"speaker": "龙王", "text": "大圣快住手！我龙宫要塌了！", "action": "dun", "duration": 2.0},
+            {"speaker": "孙悟空", "text": "罢了，俺老孙去也！", "action": "forward", "duration": 2.0}
+          ]
+        }
+      ]
+    },
+    {
+      "name": "大闹天宫",
+      "title": "大闹天宫",
+      "theme": "西游记",
+      "scenes": [
+        {
+          "scene_id": 1,
+          "title": "偷桃盗丹",
+          "description": "孙悟空偷吃蟠桃，盗取仙丹",
+          "lines": [
+            {"speaker": "旁白", "text": "孙悟空看守蟠桃园，偷吃仙桃。", "action": "idle", "duration": 3.0},
+            {"speaker": "孙悟空", "text": "这蟠桃果然美味！", "action": "dance", "duration": 2.0},
+            {"speaker": "仙女", "text": "大圣，王母娘娘要开蟠桃会了。", "action": "normal", "duration": 2.5},
+            {"speaker": "孙悟空", "text": "蟠桃会？怎么没请俺老孙？", "action": "scratch", "duration": 2.0}
+          ]
+        },
+        {
+          "scene_id": 2,
+          "title": "大闹蟠桃会",
+          "description": "孙悟空搅乱蟠桃会，偷吃仙丹",
+          "lines": [
+            {"speaker": "旁白", "text": "孙悟空变作赤脚大仙，混入瑶池。", "action": "idle", "duration": 3.0},
+            {"speaker": "孙悟空", "text": "哈哈哈，仙酒仙果，归我享用！", "action": "jump", "duration": 2.5},
+            {"speaker": "天兵", "text": "大胆妖猴！竟敢扰乱盛会！", "action": "forward", "duration": 2.0},
+            {"speaker": "孙悟空", "text": "俺老孙来去自如，看棒！", "action": "dance", "duration": 2.5}
+          ]
+        },
+        {
+          "scene_id": 3,
+          "title": "逃回花果山",
+          "description": "孙悟空反出天宫，回到花果山",
+          "lines": [
+            {"speaker": "旁白", "text": "孙悟空大闹天宫后，返回花果山。", "action": "idle", "duration": 3.0},
+            {"speaker": "孙悟空", "text": "孩儿们，俺老孙回来了！", "action": "greet", "duration": 2.5},
+            {"speaker": "众猴", "text": "大王威武！大王万岁！", "action": "dance", "duration": 2.0}
+          ]
+        }
+      ]
+    },
+    {
+      "name": "孙悟空三借芭蕉扇",
+      "title": "孙悟空三借芭蕉扇",
+      "theme": "西游记",
+      "scenes": [
+        {
+          "scene_id": 1,
+          "title": "一借芭蕉扇",
+          "description": "孙悟空向铁扇公主借扇，被扇飞",
+          "lines": [
+            {"speaker": "旁白", "text": "火焰山挡住去路，孙悟空向铁扇公主借扇。", "action": "idle", "duration": 3.0},
+            {"speaker": "孙悟空", "text": "嫂嫂，借芭蕉扇一用！", "action": "greet", "duration": 2.0},
+            {"speaker": "铁扇公主", "text": "你这泼猴，也敢来借扇！", "action": "back", "duration": 2.5},
+            {"speaker": "铁扇公主", "text": "看扇！", "action": "dance", "duration": 2.0},
+            {"speaker": "孙悟空", "text": "哎呀！被扇飞了！", "action": "jump", "duration": 2.5}
+          ]
+        },
+        {
+          "scene_id": 2,
+          "title": "二借芭蕉扇",
+          "description": "孙悟空变作虫子钻进铁扇公主肚子",
+          "lines": [
+            {"speaker": "旁白", "text": "孙悟空变作蟭蟟虫，钻入铁扇公主腹中。", "action": "idle", "duration": 3.0},
+            {"speaker": "孙悟空", "text": "嫂嫂，快把扇子借我！", "action": "dun", "duration": 2.0},
+            {"speaker": "铁扇公主", "text": "疼死我了！快出来！", "action": "scratch", "duration": 2.5},
+            {"speaker": "铁扇公主", "text": "给你扇子，快走！", "action": "forward", "duration": 2.0}
+          ]
+        },
+        {
+          "scene_id": 3,
+          "title": "三借芭蕉扇",
+          "description": "孙悟空智取真扇，扇灭火焰山",
+          "lines": [
+            {"speaker": "旁白", "text": "孙悟空拿到假扇，又变作牛魔王骗得真扇。", "action": "idle", "duration": 3.0},
+            {"speaker": "孙悟空", "text": "这扇子是真是假？试试看！", "action": "dance", "duration": 2.0},
+            {"speaker": "牛魔王", "text": "遭了！被骗了！", "action": "back", "duration": 2.5},
+            {"speaker": "孙悟空", "text": "火焰山，灭！", "action": "jump", "duration": 2.5}
+          ]
+        }
+      ]
+    },
+    {
+      "name": "红孩儿",
+      "title": "红孩儿",
+      "theme": "西游记",
+      "scenes": [
+        {
+          "scene_id": 1,
+          "title": "红孩儿现身",
+          "description": "红孩儿变成小孩骗取唐僧信任",
+          "lines": [
+            {"speaker": "旁白", "text": "红孩儿化作顽童，在路边哭喊。", "action": "idle", "duration": 3.0},
+            {"speaker": "红孩儿", "text": "救命啊！有妖怪！", "action": "scratch", "duration": 2.5},
+            {"speaker": "唐僧", "text": "悟空，快去救他。", "action": "normal", "duration": 2.0},
+            {"speaker": "孙悟空", "text": "师父，他可能有诈！", "action": "back", "duration": 2.0}
+          ]
+        },
+        {
+          "scene_id": 2,
+          "title": "红孩儿掳唐僧",
+          "description": "红孩儿趁孙悟空不注意，掳走唐僧",
+          "lines": [
+            {"speaker": "旁白", "text": "红孩儿突然发难，卷起旋风掳走唐僧。", "action": "idle", "duration": 3.0},
+            {"speaker": "红孩儿", "text": "哈哈，唐僧肉归我了！", "action": "jump", "duration": 2.5},
+            {"speaker": "孙悟空", "text": "哪里走！", "action": "forward", "duration": 2.0},
+            {"speaker": "红孩儿", "text": "三昧真火！", "action": "dance", "duration": 2.5}
+          ]
+        },
+        {
+          "scene_id": 3,
+          "title": "收服红孩儿",
+          "description": "孙悟空请来观音菩萨，收服红孩儿为善财童子",
+          "lines": [
+            {"speaker": "旁白", "text": "观音菩萨降临，用宝瓶收服红孩儿。", "action": "idle", "duration": 3.0},
+            {"speaker": "观音", "text": "红孩儿，还不归顺？", "action": "normal", "duration": 2.5},
+            {"speaker": "红孩儿", "text": "菩萨饶命！我愿意皈依！", "action": "dun", "duration": 2.0},
+            {"speaker": "孙悟空", "text": "好，这下清静了。", "action": "greet", "duration": 2.0}
+          ]
+        }
+      ]
+    },
+    {
+      "name": "孙悟空大战牛魔王",
+      "title": "孙悟空大战牛魔王",
+      "theme": "西游记",
+      "scenes": [
+        {
+          "scene_id": 1,
+          "title": "牛魔王阻路",
+          "description": "牛魔王挡住去路，与孙悟空对峙",
+          "lines": [
+            {"speaker": "旁白", "text": "牛魔王听闻孙悟空保护唐僧西行，前来挑战。", "action": "idle", "duration": 3.0},
+            {"speaker": "牛魔王", "text": "猴哥，多年不见，吃我一斧！", "action": "forward", "duration": 2.5},
+            {"speaker": "孙悟空", "text": "牛兄，何必动粗？", "action": "back", "duration": 2.0}
+          ]
+        },
+        {
+          "scene_id": 2,
+          "title": "激战变化",
+          "description": "两人各显神通，变作各种形态相斗",
+          "lines": [
+            {"speaker": "旁白", "text": "孙悟空变作巨猿，牛魔王变作白牛。", "action": "idle", "duration": 3.0},
+            {"speaker": "孙悟空", "text": "看棒！", "action": "jump", "duration": 2.5},
+            {"speaker": "牛魔王", "text": "牛角顶天！", "action": "dance", "duration": 2.0},
+            {"speaker": "旁观者", "text": "两位大王好本事！", "action": "normal", "duration": 2.0}
+          ]
+        },
+        {
+          "scene_id": 3,
+          "title": "天兵助阵",
+          "description": "天兵天将前来助孙悟空，最终降服牛魔王",
+          "lines": [
+            {"speaker": "旁白", "text": "李天王率天兵赶到，合力围攻牛魔王。", "action": "idle", "duration": 3.0},
+            {"speaker": "哪吒", "text": "牛魔王，还不投降！", "action": "forward", "duration": 2.5},
+            {"speaker": "牛魔王", "text": "罢了，我认输！", "action": "dun", "duration": 2.0},
+            {"speaker": "孙悟空", "text": "牛兄，以后莫要与取经人作对。", "action": "greet", "duration": 2.5}
+          ]
+        }
+      ]
+    }
+  ]
+}

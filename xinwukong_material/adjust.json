@@ -57,8 +57,8 @@
     "left_wrist": [
       40,
       31,
-      43.03797468354429,
-      12.658227848101317
+      30.37974683544303,
+      6.329113924050688
     ]
   },
   "rot": {
@@ -98,33 +98,37 @@
     "left_wrist": 4
   },
   "pivot": {
-    "right_knee": [
-      50,
-      1
-    ],
-    "left_knee": [
-      13,
+    "body": [
+      54,
       3
     ],
     "head": [
       112,
       4
     ],
-    "body": [
-      54,
-      3
-    ],
     "right_hip": [
       61,
       7
+    ],
+    "right_knee": [
+      50,
+      1
     ],
     "left_hip": [
       46,
       5
     ],
+    "left_knee": [
+      13,
+      3
+    ],
     "right_elbow": [
       60,
       12
+    ],
+    "right_wrist": [
+      71,
+      93
     ],
     "left_elbow": [
       14,
@@ -133,10 +137,6 @@
     "left_wrist": [
       40,
       31
-    ],
-    "right_wrist": [
-      71,
-      93
     ]
   },
   "scene_mirror": false
