@@ -235,7 +235,7 @@ pipx install poetry
 cd Langchain-Chatchat/libs/chatchat-server/
 poetry install --with lint,test -E xinference
 # 或使用 pip 编辑模式安装:
-pip install -e .
+ pip install -e .
 ```
 
 参考：[Langchain-Chatchat 开发文档](https://github.com/chatchat-space/Langchain-Chatchat/blob/master/docs/contributing/README_dev.md)
@@ -280,35 +280,6 @@ python main.py
 > 说明：项目自带的 `knowledge_base/`（9 篇知识文档 + 题库）用于第一级 Skill 检索，开箱即用；第二级 Chatchat 向量库内容由 `kb_inbox/` 投喂生成。
 
 ---
-
-## 评测体系
-
-项目提供两套评测脚本，用于量化回答质量、防止改动引入回归。
-
-### 黄金评测集回归测试（51 题，快速）
-
-```bash
-python run_eval.py          # 第一级检索评测（快，不调用 LLM）
-python run_eval.py --full   # 全链路评测（含动作生成与润色，较慢）
-```
-
-评分：`qa` 命中 1.0 分、`knowledge` 命中 0.7 分、`none` 0 分。
-
-### 500 题基准评测
-
-```bash
-python run_eval_500.py --benchmark   # 构建版本化评测基准（首次需 Ollama 在线）
-python run_eval_500.py --run         # 运行评测（需 Ollama 在线）
-python run_eval_500.py --report      # 生成 Markdown 评测报告
-```
-
-- 基准数据：`eval_benchmark_500.json`（300 道题库抽样 + 200 道生成题，均为已生成好的基线）
-- 生成题清单：`eval_questions_200.json` / `eval_questions_200.md`
-- 生成题证据基线：`eval_generated_evidence.json`
-- 运行结果：`eval_results_v4.jsonl`（断点续跑）
-- 单元测试：`python -m unittest test_run_eval_500`
-
-> 注意：知识文档集合变化后，`--benchmark` 会按文档指纹自动重建生成题证据基线。
 
 ---
 
