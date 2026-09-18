@@ -47,6 +47,8 @@ ACTION_COMMANDS = {
     "拱手礼": ("actions/greet.json", "拱手见礼！"),
     "跳跃": ("actions/jump.json", "跳起来啦！"),
     "抓耳挠腮": ("actions/scratch.json", "看我抓耳挠腮！"),
+    "向前": ("actions/forward.json", "好的，向前走两步。"),
+    "向后": ("actions/back.json", "好的，向后退两步。"),
     "向前走": ("actions/forward.json", "好的，向前走两步。"),
     "向后走": ("actions/back.json", "好的，向后退两步。"),
     "常态": ("actions/normal.json", "好的，回到常态。"),
@@ -137,12 +139,12 @@ class HybridAgentSystem:
             logger.info(f"[动作直通] 识别动作指令: '{text}' -> {action_path}")
             return HybridResponse([action_path], reply, "action", 1.0)
 
-        # ═══════ 第一级：Skill 知识库（QA 优先 + BM25 知识检索）═══════
+        # ═══════ 第一级：Skill 知识库（QA 优先 + BM25 知识检索），生成动作（gemma3:4b）═══════
         try:
             skill_result = self.skill_engine.query(text)
             if skill_result.match_type == "qa":
                 answer = skill_result.answer
-                logger.info(f"[Skill] 命中 (qa): "
+                logger.info(f"第一级[Skill] 命中 (qa): "
                             f"{answer[:80]}..." if len(answer) > 80 else f"[Skill] 命中 (qa): {answer}")
                 actions = await self._generate_action(text, answer)
                 return HybridResponse(actions, answer, "qa", skill_result.confidence)
@@ -158,20 +160,21 @@ class HybridAgentSystem:
         except Exception as e:
             logger.error(f"[Skill] 检索异常: {e}，进入第二级 Chatchat")
 
-        # ═══════ 第二级：Chatchat 向量库 ═══════
+        # ═══════ 第二级：Chatchat 向量库回答，生成动作（gemma3:4b） ═══════
         try:
-            actions, answer = await self.chatchat_system.process_input(text)
+            answer = await self.chatchat_system.process_input(text)
+            actions = await self._generate_action(text, answer)
             if not self._is_no_info_answer(answer):
-                logger.info(f"[Chatchat] 有答案: {answer[:80]}..." if len(answer) > 80 else f"[Chatchat] 有答案: {answer}")
+                logger.info(f"第二级[Chatchat] 有答案: {answer}")
                 return HybridResponse(actions, answer, "chatchat", 0.0)
             logger.info("[Chatchat] 无有效答案，进入第三级模型直答")
         except Exception as e:
             logger.error(f"[Chatchat] 调用失败: {e}，进入第三级模型直答")
 
-        # ═══════ 第三级：模型直接回答（保底）═══════
+        # ═══════ 第三级：模型直接回答以及生成动作（gemma3:4b）═══════
         try:
             answer = await self._direct_llm_answer(text)
-            logger.info(f"[模型直答] 回答: {answer[:80]}..." if len(answer) > 80 else f"[模型直答] 回答: {answer}")
+            logger.info(f"第三级[模型直答] 回答: {answer}")
             actions = await self._generate_action(text, answer)
             return HybridResponse(actions, answer, "direct", 0.0)
         except Exception as e:
@@ -219,7 +222,7 @@ class HybridAgentSystem:
             return fallback
 
         sys_prompt = (
-            "你是海宁皮影戏数字人讲解员，名叫'海宁小状元'。"
+            "你是海宁皮影戏数字人讲解员"
             "下面是从知识库检索到的原始资料，请严格依据资料回答用户的问题。\n"
             "要求：\n"
             "1. 只能使用资料中出现的信息，禁止编造、禁止延伸资料之外的内容；\n"
@@ -252,21 +255,35 @@ class HybridAgentSystem:
         if not self._ollama_client or not HAS_OPENAI:
             return "抱歉，我暂时无法回答这个问题。"
 
-        sys_prompt = (
-            "你是海宁皮影戏数字人讲解员，名叫'海宁小状元'。"
-            "你用中文回答用户的问题，语气友好、自然，符合讲解员的身份。"
-            "对于海宁皮影戏相关的问题，请尽量给出准确的回答。"
-        )
-
+        sys_prompt = """传统皮影戏数字人应答规范：
+        一、应答格式要求
+        输出结构必须为：[文本内容]
+        每次回答不超过100字
+        二、示例
+        用户输入："你是谁？"
+        文本回复："您好，我是海宁皮影戏数字人，擅长表演与制作，很高兴为您服务"
+        用户输入："皮影起源是什么？"
+        文本回复："皮影源于汉代，经历唐宋晋变革与民间创新，至今已有两千多年历史"
+        用户输入："你能为我跳个舞吗？"
+        文本回复："好的，请看我在灯光与音乐中翩翩起舞，生动传情，这就是皮影戏的表演"
+        用户输入："请你向前走两步"
+        文本回复："好的，我将按您的指令执行动作"
+        三、验证流程
+        1. 确认回答长度不超过100字
+        """
+            
         try:
             resp = self._ollama_client.chat.completions.create(
                 model=config.ACTION_MODEL,
                 messages=[
                     {"role": "system", "content": sys_prompt},
                     {"role": "user", "content": query},
+                    {"role": "assistant", "content": "您好，我是海宁皮影戏数字人，擅长表演与问答，很高兴为您服务。"}
+    
                 ],
-                temperature=0.7,
+                temperature=0.3
             )
+            print(f"[模型直答] Ollama 回答: {resp.choices[0].message.content[:80]}..." if len(resp.choices[0].message.content) > 80 else f"[模型直答] Ollama 回答: {resp.choices[0].message.content}")
             return resp.choices[0].message.content or "抱歉，我暂时无法回答这个问题。"
         except Exception as e:
             logger.error(f"[模型直答] Ollama 调用失败: {e}")
