@@ -1,4 +1,0 @@
-推荐使用 Python **3.10.14**官方要求'<3.12,>=3.10'
- 1、pip install -e .
- 2、cd Langchain-Chatchat/libs/chatchat-server
-3、chatchat start --api
