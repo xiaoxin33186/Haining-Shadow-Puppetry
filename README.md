@@ -6,17 +6,37 @@
 
 ## 目录
 
+- [环境要求](#环境要求)
 - [运行依赖](#运行依赖)
 - [系统交互流程](#系统交互流程用户输入--皮影回答)
 - [手势操控与双人偶打斗](#手势操控与双人偶打斗)
 - [剧本系统与生成](#剧本系统与生成)
 - [分享卡片系统](#分享卡片系统)
+- [本地语音播报（TTS）](#本地语音播报tts)
 - [参考](#参考)
 - [主项目环境](#主项目环境)
 - [Langchain-Chatchat 本地知识库环境](#langchain-chatchat-本地知识库环境)
 - [启动运行](#启动运行)
 - [评测体系](#评测体系)
 - [多角色皮影素材与调整工具](#多角色皮影素材与调整工具)
+- [目录结构](#目录结构)
+- [常见问题（FAQ）](#常见问题faq)
+- [许可与仓库](#许可与仓库)
+
+---
+
+## 环境要求
+
+| 项目 | 要求 | 说明 |
+|---|---|---|
+| 操作系统 | Windows（当前验证环境） | 代码含 `simhei` 回退字体与 `\` 路径写法；未在 Linux/macOS 验证 |
+| Python（主程序） | 3.10 | 依赖见 [主项目环境](#主项目环境) |
+| Python（知识库后端） | 3.10.20 | 见 [Langchain-Chatchat 本地知识库环境](#langchain-chatchat-本地知识库环境) |
+| 大模型 | Ollama + `gemma3:4b` | 动作生成、润色、剧本/分享生成、第三级直答都依赖它 |
+| 语音识别 | VOSK `vosk-model-small-cn-0.22` | 已随仓库提供（`model-cn/`） |
+| 语音播报（可选） | Piper | 已随仓库提供（`piper/`），缺失时自动静默跳过 |
+| 手势（可选） | 摄像头 + mediapipe/OpenCV | 模型已随仓库提供（`models/hand_landmarker.task`） |
+| 知识库二级检索（可选） | Langchain-Chatchat 服务 | 未启动则跳过第二级，走第一/第三级 |
 
 ---
 
@@ -44,17 +64,17 @@ project_root/
 
 若该目录缺失（或需更换模型），可访问 [VOSK Models](https://alphacephei.com/vosk/models) 下载后解压到 `model-cn/` 下，并保证目录名与 `main.py` 顶部 `VOSK_MODEL_PATH` 一致。
 
-### 3. 语言模式
+### 3. 语音输入（可选）
 
-- 点击 **Text Mode** 按钮切换到语音交互。
+- 点击界面「**语音模式**」按钮切换到语音交互（按钮文案在「语音模式 / 文字模式」间切换）。
 - 按下 **空格键** 开始录音。
 - 再次按下 **空格键** 结束录音。
-- 识别出的语音文本会显示在界面左上角。
+- 识别出的语音文本会短暂显示在界面**右上角**。
 
 ### 4. 摄像头手势（可选）
 
 - 安装 `mediapipe`（含 OpenCV）：`pip install mediapipe`；
-- 手势模型 `models/hand_landmarker.task` 随仓库提供，缺失时会自动下载；
+- 手势模型 `models/hand_landmarker.task` 随仓库提供；缺失时手势功能直接禁用（不会自动下载）；
 - 无需摄像头时可不安装，文字/语音功能不受影响。详见 [手势操控与双人偶打斗](#手势操控与双人偶打斗)。
 
 ---
@@ -131,7 +151,7 @@ flowchart TD
   ```bash
   pip install mediapipe
   ```
-  模型 `models/hand_landmarker.task` 随仓库提供；缺失时首次运行会尝试自动下载到 `./models/`。
+  模型 `models/hand_landmarker.task` 随仓库提供；缺失时手势功能直接禁用（不会自动下载）。
 - 缺 mediapipe/OpenCV、无摄像头或模型缺失时，手势功能自动禁用，**不影响**文字/语音问答主链路。
 - 摄像头后端会**自动逐个尝试**（DSHOW → MSMF → 默认）并检测黑帧，选用能出画面的后端。
 - 排错提示：若手势开启后预览为**纯黑**，通常是**上一个卡死的 `python main.py` 进程仍在占用摄像头**，请在任务管理器结束所有残留的 `python main.py` 后重试。
@@ -208,6 +228,27 @@ flowchart TD
 
 ---
 
+## 本地语音播报（TTS）
+
+系统用本地 **Piper** 做中文语音合成：所有文本回复、剧本台词、分享文案都会**异步播报**，不阻塞界面。
+
+- 组件已随仓库提供：
+
+  ```
+  piper/
+  ├── piper/piper.exe              # piper 主程序
+  ├── piper/espeak-ng-data/        # espeak-ng 音素数据
+  ├── zh_CN-huayan-medium.onnx     # 中文语音模型
+  ├── zh_CN-huayan-medium.onnx.json
+  └── 集成说明.md
+  ```
+
+- 代码入口 `tts_engine.py`：`is_available()` 判断组件是否就绪，`speak_async()` 异步合成并用 `pygame.mixer` 播放；由 `main.py` 在回复/剧本/分享时调用。
+- **降级**：`piper/piper/piper.exe` 或 `piper/zh_CN-huayan-medium.onnx` 缺失时，`is_available()` 返回 False，播报自动跳过，**不影响**文字/问答主链路。
+- **路径限制**：piper 必须位于**无中文**的路径下，否则 espeak-ng 会报 `Illegal byte sequence`。本仓库把 piper 放在项目根目录 `piper/`，请避免把整个项目放到含中文的路径。
+
+---
+
 ## 参考
 
 - [腾讯云开发者社区](https://cloud.tencent.com/developer/article/2542898)
@@ -217,36 +258,74 @@ flowchart TD
 
 ## 主项目环境
 
-- 主要 Python 环境：**3.12.13**
-- 在已配置好依赖的 Python 环境中安装所需依赖包：
+- 主要 Python 环境：**3.10**
+
+### 安装步骤
+
+1. 准备并激活 Python **3.10** 环境（conda / venv 均可）。
+
+2. 在已配置好依赖的 Python 环境中安装所需依赖包：
 
 ```bash
 pip install aiofiles==25.1.0 annotated-types==0.7.0 anyio==4.14.1 autogen-agentchat==0.7.5 autogen-core==0.7.5 autogen-ext==0.7.5 certifi==2026.6.17 cffi==2.0.0 charset-normalizer==3.4.7 colorama==0.4.6 distro==1.9.0 et_xmlfile==2.0.0 h11==0.16.0 httpcore==1.0.9 httpx==0.28.1 idna==3.18 jiter==0.16.0 jsonref==1.1.0 numpy==2.5.0 ollama==0.6.2 openai==2.44.0 openpyxl==3.1.5 opentelemetry-api==1.43.0 packaging==26.0 pillow==12.2.0 pip==26.1.2 protobuf==5.29.6 pycparser==3.0 pydantic==2.13.4 pydantic_core==2.46.4 pygame==2.6.1 regex==2026.6.28 requests==2.34.2 setuptools==82.0.1 sniffio==1.3.1 sounddevice==0.5.5 srt==3.5.3 tiktoken==0.13.0 tqdm==4.68.3 typing_extensions==4.15.0 typing-inspection==0.4.2 urllib3==2.7.0 vosk==0.3.45 websockets==16.0 wheel==0.47.0 xlrd==2.0.2
+```
+
+3. 验证依赖是否装好：
+
+```bash
+python -c "import pygame, vosk, sounddevice, numpy, openai, httpx, autogen_agentchat; print('main deps ok')"
 ```
 
 > 语音识别模型 `vosk-model-small-cn-0.22` **已随仓库提供**（`model-cn/`）；如缺失，可从 [VOSK Models](https://alphacephei.com/vosk/models) 下载后解压到 `model-cn/` 目录。
 
 ## Langchain-Chatchat 本地知识库环境
 
-- 推荐使用 Python **3.10.20**，在已配置好依赖的 Python 环境中安装：
+- 推荐 Python 环境：**3.10.20**
 
-```bash
-pipx install poetry
-cd Langchain-Chatchat/libs/chatchat-server/
-poetry install --with lint,test -E xinference
-# 或使用 pip 编辑模式安装:
- pip install -e .
-```
+### 安装步骤（确保在 `chatchat-server` 目录下）
+
+1. 准备并激活 Python **3.10.20** 环境，安装依赖（poetry 或 pip 二选一）：
+
+   ```bash
+   pipx install poetry
+   cd Langchain-Chatchat/libs/chatchat-server/
+   poetry install --with lint,test -E xinference
+   # 或使用 pip 编辑模式安装:
+   python -m pip install -e .
+   ```
+
+2. 若依赖安装失败或需要重装，先升级 pip 再重新安装：
+
+   ```bash
+   python -m pip install --upgrade pip -i https://pypi.tuna.tsinghua.edu.cn/simple
+   python -m pip install -e . -i https://pypi.tuna.tsinghua.edu.cn/simple
+   ```
+
+3. 验证命令是否可用：
+
+   ```bash
+   chatchat --help
+   ```
 
 参考：[Langchain-Chatchat 开发文档](https://github.com/chatchat-space/Langchain-Chatchat/blob/master/docs/contributing/README_dev.md)
+
+> 排错提示：如果 **无法通过 `chatchat` 命令启动**，通常说明依赖没有装好（或不在当前环境里），请确认已激活正确的 Python 环境后，重新执行上面的安装步骤。
 
 ---
 
 ## 启动运行
 
-> 提示：本仓库不随附一键启动脚本，请按以下命令分别在三个终端中手动启动。
 
-### 第一步：启动知识库后端
+
+完整顺序：**安装依赖（1、2）→ 启动服务（3、4）→ 启动主程序（5）**。
+
+1. 安装主项目依赖 → 见 [主项目环境](#主项目环境)
+2. 安装知识库后端依赖 → 见 [Langchain-Chatchat 本地知识库环境](#langchain-chatchat-本地知识库环境)
+3. 启动知识库后端
+4. 启动 Ollama
+5. 启动主程序
+
+### 3. 启动知识库后端
 
 在一个窗口终端中执行：
 
@@ -255,14 +334,14 @@ cd Langchain-Chatchat\libs\chatchat-server
 chatchat start --api
 ```
 
-### 第二步：启动 Ollama
+### 4. 启动 Ollama
 
 ```bash
 ollama serve
 ollama run gemma3:4b
 ```
 
-### 第三步：启动主程序
+### 5. 启动主程序
 
 在另一个终端窗口中执行：
 
@@ -281,13 +360,42 @@ python main.py
 
 ---
 
+## 评测体系
+
+项目提供两套评测脚本，用于量化回答质量、防止改动引入回归。
+
+### 黄金评测集回归测试（57 题，快速）
+
+```bash
+python run_eval.py          # 第一级检索评测（快，不调用 LLM）
+python run_eval.py --full   # 全链路评测（含动作生成与润色，较慢）
+```
+
+评分：`qa` 命中 1.0 分、`knowledge` 命中 0.7 分、`none` 0 分。
+
+### 500 题基准评测
+
+```bash
+python run_eval_500.py --benchmark   # 构建版本化评测基准（首次需 Ollama 在线）
+python run_eval_500.py --run         # 运行评测（需 Ollama 在线）
+python run_eval_500.py --report      # 生成 Markdown 评测报告
+```
+
+- 基准数据：`eval_benchmark_500.json`（300 道题库抽样 + 200 道生成题，均为已生成好的基线）
+- 生成题清单：`eval_questions_200.json` / `eval_questions_200.md`
+- 生成题证据基线：`eval_generated_evidence.json`
+- 运行结果：`eval_results_v4.jsonl`（断点续跑）
+- 单元测试：`python -m unittest test_run_eval_500`
+
+> 注意：知识文档集合变化后，`--benchmark` 会按文档指纹自动重建生成题证据基线。
+
 ---
 
 ## 多角色皮影素材与调整工具
 
 ### 角色 = 素材目录 + 独立调参配置
 
-一个角色就是一个含 **10 张标准命名 PNG + `adjust.json`** 的目录：
+一个角色就是一个含 **10 张标准命名 PNG（外加可选的 `adjust.json`）** 的目录：
 
 ```
 xinwukong_material/          # 新悟空
@@ -297,16 +405,16 @@ wukong_shadow_play_material/ # 悟空
 bull_demon_king_material/    # 牛魔王
 sha_wujing_material/         # 沙僧
 zhu_bajie_material/          # 猪八戒
-shadow_play_material/        # 海宁通用（备用）
+shadow_play_material/        # 海宁通用（备用，当前无 adjust.json）
 ```
 
-`adjust.json` 按角色独立保存 **偏移 / 旋转 / 镜像 / 图层 / 枢轴 / 整体朝向**，角色之间互不干扰。
+`adjust.json` 按角色独立保存 **偏移 / 旋转 / 镜像 / 图层 / 枢轴 / 整体朝向**，角色之间互不干扰；缺失时使用引擎默认参数。
 
 ### 角色切换
 
 - 在**调整工具**里按 `Tab` 循环切换角色，选中结果写入根目录 `current_character.txt`；
-- 主程序 `python main.py` 启动时自动读取 `current_character.txt` 加载对应角色；
-- 也可手动把 `current_character.txt` 内容改成目标目录名。
+- `current_character.txt` 决定渲染引擎 `pygame_Alpha.py` 的默认素材目录（供调整工具与单偶兜底使用）；
+- **主程序 `main.py` 的左右偶角色以 `puppet_roles.json` 为准**，见下一节。
 
 #### 主程序内切换左右偶角色（双人偶）
 
@@ -322,7 +430,7 @@ shadow_play_material/        # 海宁通用（备用）
 |---|---|
 | 播放 / 暂停、逐帧、切换动作 | 空格、`,` `.`、`[` `]` |
 | 轮播全部动作 | `C` |
-| 点选部件 / 移动 | 鼠标左键点选 + 拖动 |
+| 点选部件 / 移动 | 鼠标左键点选 + 拖动（方向键亦可移动） |
 | 旋转 | 鼠标右键拖 或 `Q`/`E` |
 | 单件镜像 / 全部镜像 | `M` / `L` |
 | 整体朝向镜像 | `F` |
@@ -330,8 +438,13 @@ shadow_play_material/        # 海宁通用（备用）
 | 烘焙旋转/镜像写入素材 PNG | `X` |
 | 图层（部件前后） | `PageUp` / `PageDown` |
 | 复位该部件 / 全部回初始 | `R` / `B` |
+| 大字校准姿势（四肢摊开） | `D` |
+| 整体缩放（写入 `SCALE_FACTOR`） | `-` / `=` |
+| 按序号选部件 | `0`–`9` |
 | 显示全部标记 / 结构示意图 | `V` / `Y` |
 | 保存到当前角色配置 / 退出 | `S` / `ESC` |
+
+> 旋转 / 移动时按住 `Shift` 可加速（旋转 5°、位移 10px）。
 
 窗口可自由拉伸；右上"部件原图"面板可点击设定该部件真正的关节枢轴像素（配合 `O` 自动竖直与 `X` 烘焙，可修正素材初始方向不正的问题）。
 
@@ -354,3 +467,70 @@ python prepare_character.py <原始素材目录> <输出目录名>
 ### 历史兼容
 
 根目录 `pivot_config.json` 已废弃，改由各角色目录下的 `adjust.json` 承担；首次运行时引擎会把旧文件自动迁入当前角色的 `adjust.json`，原配置不丢失。旧版悟空角色的"肘/肩关节补偿"已按角色启用（仅切到悟空时生效）。
+
+---
+
+## 目录结构
+
+```
+Haining-Shadow-Puppetry/
+├── main.py                      # 主程序入口（Pygame 界面 / 输入 / 调度）
+├── pygame_Alpha.py              # 皮影渲染引擎（素材、枢轴、配置加载）
+├── local_knowledge_qa.py        # 第一级本地知识问答引擎（QA + BM25）
+├── skill_chatchat_hybrid.py     # 三级混合检索适配器（Skill → Chatchat → 直答）
+├── chatchat_adapter.py          # 第二级 Chatchat 后端对接
+├── api_client.py                # Chatchat HTTP 客户端
+├── chatchat_config.py           # 模型 / 知识库 / 同步配置
+├── digital_human_agents_v2.py   # 旧 AutoGen 实现（回退路径）
+├── tts_engine.py                # Piper 本地语音播报
+├── gesture_recognizer.py        # 摄像头手势识别（MediaPipe）
+├── script_player.py             # 剧本播放与生成
+├── share_card.py                # 分享卡片与文案生成
+├── kb_auto_sync.py              # kb_inbox → Chatchat 向量库同步
+├── adjust_puppet.py             # 皮影素材可视化校准工具
+├── prepare_character.py         # 通用角色素材生成流水线
+├── prepare_material.py          # 新悟空素材锚点重切
+├── run_eval.py                  # 黄金评测集回归测试
+├── run_eval_500.py              # 500 题基准评测
+├── test_run_eval_500.py         # 评测脚本单元测试
+├── actions/                     # 动作动画 JSON（greet / dance / punch …）
+├── <角色>_material/             # 各角色素材目录（10 PNG + adjust.json）
+├── knowledge_base/              # 知识文档（实际加载项以 knowledge-sources.json 为准）
+├── knowledge-sources.json       # 知识源清单（role=knowledge/qa 才会被加载）
+├── generated_scripts/           # 剧目库与生成剧本存档
+├── card_templates/              # 分享卡片预制底图与排版
+├── models/hand_landmarker.task  # 手势模型
+├── model-cn/                    # VOSK 中文语音识别模型
+├── piper/                       # 本地 TTS（piper.exe + 中文语音模型）
+├── workbackground/              # 舞台背景图
+├── Langchain-Chatchat/          # 知识库后端框架
+├── share_cards/                 # 分享成品（已 gitignore）
+└── kb_inbox/                    # 二级知识库投放目录（内容 gitignore）
+```
+
+> 入库情况：`model-cn/`、`models/`、`piper/`、`card_templates/`、`knowledge_base/`、`generated_scripts/` 与评测数据均在仓库中；`share_cards/`、`kb_inbox/` 内容、`start_*.bat`、原始大图目录不入库。
+>
+> `knowledge_base/` 目录内还含若干参考 PDF；只有 `knowledge-sources.json` 中 `role=knowledge` / `role=qa` 的文件会被引擎加载（当前为 9 篇知识文档 + 1 份题库）。
+
+---
+
+## 常见问题（FAQ）
+
+| 现象 | 原因 / 解决 |
+|---|---|
+| 手势开启后预览纯黑 | 通常是有残留的 `python main.py` 进程仍在占用摄像头，任务管理器结束全部残留进程后重试 |
+| 按空格没有语音识别 | 检查 `model-cn/vosk-model-small-cn-0.22/` 是否存在，且与 `main.py` 的 `VOSK_MODEL_PATH` 一致 |
+| 手势按钮点了没反应 | 未安装 `mediapipe`/OpenCV，或 `models/hand_landmarker.task` 缺失；手势功能会直接禁用（不会自动下载） |
+| 回复没有声音 / 不播报 | `piper/piper/piper.exe` 或 `piper/zh_CN-huayan-medium.onnx` 缺失；或项目路径含中文导致 espeak-ng 报错 |
+| 第二级检索没有结果 | 未启动 `chatchat start --api`；系统会自动跳过第二级，走第一/第三级 |
+| `chatchat` 命令不可用 / 无法启动 | 通常是依赖没装好（或不在当前环境）。在 `chatchat-server/` 下升级 pip 后重跑 `python -m pip install -e .`，再用 `chatchat --help` 验证 |
+| 剧本 / 分享生成失败 | 生成依赖 Ollama 在线，离线时不会写文件 |
+| `kb_inbox/` 放了文件没生效 | 需运行 `python kb_auto_sync.py`，且 Chatchat 后端已启动 |
+| 想更换大模型 | 修改 `chatchat_config.py` 的 `LLM_MODEL` / `ACTION_MODEL`，并 `ollama pull` 对应模型 |
+
+---
+
+## 许可与仓库
+
+- 许可证：**MIT**，见 [LICENSE](LICENSE)（Copyright (c) 2025 QuentinCrane）
+- 仓库地址：<https://github.com/xiaoxin33186/Haining-Shadow-Puppetry>

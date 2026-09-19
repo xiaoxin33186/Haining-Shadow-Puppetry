@@ -1050,7 +1050,8 @@ def pygame_loop():
     clock = pygame.time.Clock()
 
 
-    input_box_height = 245
+    input_box_scale = 0.62
+    input_box_height = int(245 * input_box_scale)
     input_box_width = max(950, w - 180)
     input_box_x = (w - input_box_width - 130) // 2
     input_box_y = h - input_box_height - 10
