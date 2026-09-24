@@ -100,3 +100,6 @@ share_cards/
 
 # 根目录集成说明与 piper/集成说明.md 重复，仅提交 piper/ 下那份
 /集成说明.md
+
+# 视频系统：手动下载的视频体积大不入库（video_cache.json 作为断网兜底缓存入库）
+download_videos/

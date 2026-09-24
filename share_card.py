@@ -169,7 +169,7 @@ class ShareCardSystem:
         script_text = self._script_context(script) or "（无）"
 
         sys_prompt = (
-            "你是海宁皮影戏数字人'海宁小状元'的社媒运营助手。"
+            "你是海宁皮影戏数字人的社媒运营助手。"
             "根据主题、用户原话、剧本资料与知识库证据，生成一张知识卡片和一条分享文案。"
             "要求：严格依据给定资料，禁止编造；语言自然、有感染力；只输出 JSON。"
         )

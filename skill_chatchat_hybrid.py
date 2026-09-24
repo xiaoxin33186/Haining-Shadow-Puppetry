@@ -58,7 +58,7 @@ ACTION_COMMANDS = {
     "捏合": ("actions/scratch.json", "捏合搓手，瞧我抓耳挠腮！"),
     "搓手": ("actions/scratch.json", "捏合搓手，瞧我抓耳挠腮！"),
     # [FIGHT] 打戏六动作
-    "出拳": ("actions/punch.json", "吃俺老孙一拳！"),
+    "出拳": ("actions/punch.json", "吃我一拳！"),
     "踢腿": ("actions/kick.json", "看我的飞踢！"),
     "格挡": ("actions/block.json", "接招，格挡防御！"),
     "前冲": ("actions/lunge.json", "看招，前冲！"),

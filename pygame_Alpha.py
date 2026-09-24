@@ -49,8 +49,8 @@ SCENE_MIRROR = False
 
 PROJECT = Path(__file__).resolve().parent
 CHAR_DISPLAY = {
-    "xinwukong_material": "新悟空",
-    "wukong_shadow_play_material": "悟空",
+    "xinwukong_material": "悟空",
+    "wukong_shadow_play_material": "旧悟空",
     "shadow_play_material": "海宁通用",
     "bull_demon_king_material": "牛魔王",
     "sha_wujing_material": "沙僧",

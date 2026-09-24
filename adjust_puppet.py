@@ -19,6 +19,7 @@ PART_CN = {
 ACTION_FILES = [p for p in [
     "idle.json", "normal.json", "greet.json", "dance.json",
     "forward.json", "back.json", "jump.json", "scratch.json", "dun.json",
+    "punch.json", "kick.json", "block.json", "lunge.json", "retreat.json", "hit.json",
 ] if (Path("actions") / p).exists()]
 
 FONT_PATH = "font.ttf"
@@ -94,6 +95,7 @@ def main():
 
     selected = None
     paused = True
+    play_mode = False
     idx = 0
     dragging = False
     rotating = False
@@ -312,7 +314,7 @@ def main():
         line1 = f"角色:{ch}  动作:{a}  {play_st}  帧 {idx}/{len(frames)}   空格=播放/暂停  ,/.=逐帧  [ ]=换动作  Tab=切角色  D=大字校准{cyc}"
         line2 = "左键点选; 左键拖=移动  右键拖=旋转  Q/E=旋转 方向键=微移  M=本件镜像  L=全部镜像"
         line3 = "PgUp/PgDn=图层  1-0选件  R=复位  B=全部回初始  O=自动竖直  X=烘焙入素材  -=缩放  F=朝向  V=全标记  Y=示意图"
-        line3b = "S保存 ESC退出 窗口可拉伸; 定枢轴: 右上原图面板点真实关节; 灰线=该段骨架轴"
+        line3b = "P=播放模式(纯净预览) S保存 ESC退出 窗口可拉伸; 定枢轴: 右上原图面板点真实关节; 灰线=该段骨架轴"
         if selected:
             px = base.PART_PARAM[selected]
             rot = base.ROT_OFF.get(selected, 0.0)
@@ -337,7 +339,21 @@ def main():
                 msg = f"窗口已调为 {sw}x{sh}"
             elif e.type == pygame.KEYDOWN:
                 if e.key == pygame.K_ESCAPE:
-                    return
+                    if play_mode:
+                        play_mode = False
+                        paused = True
+                        msg = "已退出播放模式"
+                    else:
+                        return
+                elif e.key == pygame.K_p:
+                    play_mode = not play_mode
+                    if play_mode:
+                        big_star = False
+                        paused = False
+                        msg = "播放模式: 空格=暂停/播放  [ ]=切动作  C=轮播  P=退出"
+                    else:
+                        paused = True
+                        msg = "已退出播放模式"
                 elif e.key == pygame.K_SPACE:
                     paused = not paused
                 elif e.key == pygame.K_s:
@@ -433,7 +449,7 @@ def main():
                     elif e.key == pygame.K_RIGHT: base.PART_PARAM[selected][2] += d * hflip
                     elif e.key == pygame.K_UP: base.PART_PARAM[selected][3] -= d
                     elif e.key == pygame.K_DOWN: base.PART_PARAM[selected][3] += d
-            elif e.type == pygame.MOUSEBUTTONDOWN and e.button == 1:
+            elif e.type == pygame.MOUSEBUTTONDOWN and e.button == 1 and not play_mode:
                 mx, my = e.pos
                 x0, y0, pw, ph = preview_geom()
                 if selected and x0 <= mx <= x0 + pw and y0 <= my <= y0 + ph:
@@ -457,14 +473,14 @@ def main():
                         dragging = True
                         last_mouse = e.pos
                         msg = f"选中 {best} {PART_CN.get(best, '')}"
-            elif e.type == pygame.MOUSEBUTTONDOWN and e.button == 3 and selected:
+            elif e.type == pygame.MOUSEBUTTONDOWN and e.button == 3 and selected and not play_mode:
                 rotating = True
                 last_mouse = e.pos
-            elif e.type == pygame.MOUSEBUTTONUP and e.button == 1:
+            elif e.type == pygame.MOUSEBUTTONUP and e.button == 1 and not play_mode:
                 dragging = False; last_mouse = None
-            elif e.type == pygame.MOUSEBUTTONUP and e.button == 3:
+            elif e.type == pygame.MOUSEBUTTONUP and e.button == 3 and not play_mode:
                 rotating = False; last_mouse = None
-            elif e.type == pygame.MOUSEMOTION and dragging and selected:
+            elif e.type == pygame.MOUSEMOTION and dragging and selected and not play_mode:
                 mx, my = e.pos
                 if last_mouse:
                     dx = (mx - last_mouse[0]) / base.SCALE_FACTOR
@@ -474,7 +490,7 @@ def main():
                     base.PART_PARAM[selected][2] += dx
                     base.PART_PARAM[selected][3] += dy
                 last_mouse = e.pos
-            elif e.type == pygame.MOUSEMOTION and rotating and selected:
+            elif e.type == pygame.MOUSEMOTION and rotating and selected and not play_mode:
                 mx, _ = e.pos
                 if last_mouse:
                     ang = (mx - last_mouse[0]) * 0.5
@@ -485,73 +501,79 @@ def main():
 
         base.render(screen, bg, mats, cur_joints(), adj, 0)
 
-        for p in PART_ORDER:
-            a = disp_anchor(p)
-            if not a: continue
-            if p == selected:
-                pygame.draw.circle(screen, ACCENT, (int(a[0]), int(a[1])), 6)
-                lab = small.render(p, True, ACCENT)
-                screen.blit(lab, (int(a[0]) + 7, int(a[1]) - 7))
+        if play_mode:
+            hint = small.render(
+                f"▶ 播放模式  动作:{ACTION_FILES[action_idx]}  (P退出  空格=暂停/播放  [ ]=切动作  C=轮播)",
+                True, (180, 190, 220))
+            screen.blit(hint, (12, 10))
+        else:
+            for p in PART_ORDER:
+                a = disp_anchor(p)
+                if not a: continue
+                if p == selected:
+                    pygame.draw.circle(screen, ACCENT, (int(a[0]), int(a[1])), 6)
+                    lab = small.render(p, True, ACCENT)
+                    screen.blit(lab, (int(a[0]) + 7, int(a[1]) - 7))
+                elif show_all:
+                    pygame.draw.circle(screen, (0, 255, 255), (int(a[0]), int(a[1])), 4)
+                    lab = small.render(p, True, (0, 255, 255))
+                    screen.blit(lab, (int(a[0]) + 6, int(a[1]) - 6))
+                else:
+                    pygame.draw.circle(screen, (120, 135, 165), (int(a[0]), int(a[1])), 3)
+
+            if selected:
+                jn1, jn2 = base.PART_CONNECT[selected]
+                s1, s2 = joint_screen(jn1), joint_screen(jn2)
+                if s1 and s2:
+                    pygame.draw.line(screen, (140, 155, 185),
+                                     (int(s1[0]), int(s1[1])), (int(s2[0]), int(s2[1])), 1)
+                for jn in (jn1, jn2):
+                    s = joint_screen(jn)
+                    if s:
+                        pygame.draw.circle(screen, (255, 70, 70), (int(s[0]), int(s[1])), 5)
+                        lab = small.render(jn, True, (255, 70, 70))
+                        screen.blit(lab, (int(s[0]) + 6, int(s[1]) - 6))
             elif show_all:
-                pygame.draw.circle(screen, (0, 255, 255), (int(a[0]), int(a[1])), 4)
-                lab = small.render(p, True, (0, 255, 255))
-                screen.blit(lab, (int(a[0]) + 6, int(a[1]) - 6))
-            else:
-                pygame.draw.circle(screen, (120, 135, 165), (int(a[0]), int(a[1])), 3)
+                for jn in NODES:
+                    s = joint_screen(jn)
+                    if s:
+                        pygame.draw.circle(screen, (255, 70, 70), (int(s[0]), int(s[1])), 3)
 
-        if selected:
-            jn1, jn2 = base.PART_CONNECT[selected]
-            s1, s2 = joint_screen(jn1), joint_screen(jn2)
-            if s1 and s2:
-                pygame.draw.line(screen, (140, 155, 185),
-                                 (int(s1[0]), int(s1[1])), (int(s2[0]), int(s2[1])), 1)
-            for jn in (jn1, jn2):
-                s = joint_screen(jn)
-                if s:
-                    pygame.draw.circle(screen, (255, 70, 70), (int(s[0]), int(s[1])), 5)
-                    lab = small.render(jn, True, (255, 70, 70))
-                    screen.blit(lab, (int(s[0]) + 6, int(s[1]) - 6))
-        elif show_all:
-            for jn in NODES:
-                s = joint_screen(jn)
-                if s:
-                    pygame.draw.circle(screen, (255, 70, 70), (int(s[0]), int(s[1])), 3)
+            if selected:
+                x0, y0, pw, ph, z, dx, dy, iw, ih = preview_place()
+                pane = pygame.Surface((pw, ph), pygame.SRCALPHA)
+                pane.fill((15, 15, 25, 220))
+                screen.blit(pane, (x0, y0))
+                label = small.render("部件原图  点这儿定枢轴(关节):", True, (255, 255, 255))
+                screen.blit(label, (x0 + 6, y0 + 2))
+                img = mats[selected]
+                scaled = pygame.transform.smoothscale(
+                    img, (max(1, int(iw * z)), max(1, int(ih * z))))
+                screen.blit(scaled, (int(dx), int(dy)))
+                pxx, pyy = base.PART_PARAM[selected][0], base.PART_PARAM[selected][1]
+                cx, cy = int(dx + pxx * z), int(dy + pyy * z)
+                pygame.draw.line(screen, (255, 60, 60), (cx - 10, cy), (cx + 10, cy), 2)
+                pygame.draw.line(screen, (255, 60, 60), (cx, cy - 10), (cx, cy + 10), 2)
+                pygame.draw.circle(screen, (255, 255, 255), (cx, cy), 3)
+            elif show_map:
+                draw_map()
 
-        if selected:
-            x0, y0, pw, ph, z, dx, dy, iw, ih = preview_place()
-            pane = pygame.Surface((pw, ph), pygame.SRCALPHA)
-            pane.fill((15, 15, 25, 220))
-            screen.blit(pane, (x0, y0))
-            label = small.render("部件原图  点这儿定枢轴(关节):", True, (255, 255, 255))
-            screen.blit(label, (x0 + 6, y0 + 2))
-            img = mats[selected]
-            scaled = pygame.transform.smoothscale(
-                img, (max(1, int(iw * z)), max(1, int(ih * z))))
-            screen.blit(scaled, (int(dx), int(dy)))
-            pxx, pyy = base.PART_PARAM[selected][0], base.PART_PARAM[selected][1]
-            cx, cy = int(dx + pxx * z), int(dy + pyy * z)
-            pygame.draw.line(screen, (255, 60, 60), (cx - 10, cy), (cx + 10, cy), 2)
-            pygame.draw.line(screen, (255, 60, 60), (cx, cy - 10), (cx, cy + 10), 2)
-            pygame.draw.circle(screen, (255, 255, 255), (cx, cy), 3)
-        elif show_map:
-            draw_map()
-
-        yy = 6
-        for ln in info_lines():
-            if not ln:
-                continue
-            t = small.render(ln, True, (255, 255, 255))
-            screen.blit(t, (8, yy)); yy += 18
-        pygame.draw.rect(screen, (255, 255, 255), (8, yy + 2, sw - 16, 60), 1)
-        yy += 8
-        for i, p in enumerate(PART_ORDER):
-            col = ACCENT if p == selected else (200, 200, 200)
-            k = str((i + 1) % 10)
-            t = small.render(f"[{k}] {PART_CN[p]} ({p})", True, col)
-            if i % 2 == 0:
-                screen.blit(t, (16, yy))
-            else:
-                screen.blit(t, (sw // 2 + 10, yy)); yy += 18
+            yy = 6
+            for ln in info_lines():
+                if not ln:
+                    continue
+                t = small.render(ln, True, (255, 255, 255))
+                screen.blit(t, (8, yy)); yy += 18
+            pygame.draw.rect(screen, (255, 255, 255), (8, yy + 2, sw - 16, 60), 1)
+            yy += 8
+            for i, p in enumerate(PART_ORDER):
+                col = ACCENT if p == selected else (200, 200, 200)
+                k = str((i + 1) % 10)
+                t = small.render(f"[{k}] {PART_CN[p]} ({p})", True, col)
+                if i % 2 == 0:
+                    screen.blit(t, (16, yy))
+                else:
+                    screen.blit(t, (sw // 2 + 10, yy)); yy += 18
 
         pygame.display.flip()
         if not paused:

@@ -78,9 +78,45 @@ def speak(text: str):
             pass
 
 
+# ===== 播报串行化 =====
+# pygame.mixer.music 是全局单例：多个 TTS 线程并发 load/play/unload 会互相把对方正在播放的
+# 音频释放掉（实测 4 个并发 speak 仅 2.7s 就"全部结束"，而单次完整播放需 1.5s），
+# 严重时会卡死在 SDL_mixer 内部锁上，把 pygame 主循环一起拖住（表现为界面死机）。
+# 这里改为「一个常驻工作线程」串行播放，所有 mixer 调用都只发生在这一个线程里。
+_cond = threading.Condition()
+_pending = None
+_worker = None
+
+
+def _worker_loop():
+    """常驻播报线程：串行取用待播文本，保证同一时刻只有一段语音。"""
+    global _pending
+    while True:
+        with _cond:
+            while _pending is None:
+                _cond.wait()
+            text = _pending
+            _pending = None
+        try:
+            speak(text)
+        except Exception as e:  # noqa: BLE001
+            print(f"[TTS] 播报异常（已忽略，线程继续）: {e}")
+
+
 def speak_async(text: str):
-    """异步播报（不阻塞主线程）"""
-    threading.Thread(target=speak, args=(text,), daemon=True).start()
+    """异步播报（不阻塞主线程），同一时刻只会有一段语音在播放。
+
+    连发手势时不会堆积：若队列里已有未开始播放的请求，直接用本次覆盖它（只保留最新一条）。
+    """
+    global _pending, _worker
+    if not is_available():
+        return
+    with _cond:
+        _pending = text
+        if _worker is None or not _worker.is_alive():
+            _worker = threading.Thread(target=_worker_loop, daemon=True)
+            _worker.start()
+        _cond.notify()
 
 
 if __name__ == "__main__":

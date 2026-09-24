@@ -12,6 +12,7 @@ import asyncio
 import queue
 import json
 import os
+import re
 from pathlib import Path
 import time
 
@@ -119,6 +120,20 @@ except ImportError as e:
     def create_script_system(*args, **kwargs):
         return ScriptUI()
 
+# [视频集成] 导入视频播放系统（剧本模式下用带“视频”的指令触发）
+try:
+    from video_player_system import create_video_player_system, VideoPlayerSystem
+    VIDEO_SYSTEM_AVAILABLE = True
+    print("[视频] 视频播放系统模块加载成功")
+except Exception as e:  # noqa: BLE001
+    print(f"[视频] 警告: 无法导入视频播放系统: {e}，视频功能将不可用")
+    print("       常见原因：缺少 opencv-python / requests / numpy")
+    VIDEO_SYSTEM_AVAILABLE = False
+    VideoPlayerSystem = None
+
+    def create_video_player_system(*args, **kwargs):
+        return None
+
 # [分享卡片] 导入分享系统（预制底图 + 模型生成文字）
 try:
     from share_card import create_share_system, ShareCardSystem
@@ -150,23 +165,19 @@ ACTION_MAP = {
     "受击":   "hit",
 }
 
-# [GESTURE] 摄像头抽象手势 -> 皮影动作映射（六个打戏动作 + 挥手/捏合）
-# 单手手势 left/right -> 对应左右人偶；双手手势 both -> 两人偶同时做
+# [GESTURE] 摄像头抽象手势 -> 皮影动作映射（四个单手手势）
+# 单手手势 left/right -> 对应左右人偶
 GESTURE_ACTION_MAP = {
-    "wave":  ("actions/greet.json",   "挥手致意，这就拱手见礼！"),
-    "pinch": ("actions/scratch.json", "捏合搓手，瞧我抓耳挠腮！"),
-    "fist":  ("actions/punch.json",   "吃俺老孙一拳！"),
+    "fist":  ("actions/punch.json",   "吃我一拳！"),
     "kick":  ("actions/kick.json",    "看我的飞踢！"),
-    "push":  ("actions/lunge.json",   "看招，前冲！"),
-    "pull":  ("actions/retreat.json", "后撤躲闪！"),
-    "cross": ("actions/block.json",   "接招，格挡防御！"),
-    "guard": ("actions/hit.json",     "哎呀，被打中了！"),
+    "push":  ("actions/forward.json", "向前走！"),
+    "pinch": ("actions/back.json",    "向后走！"),
 }
 
 # 原地类动作（播放结束后人物归位到界面中央）；
-# 移动类动作（forward/back 向前走/向后走）结束后保持当前位置
-CENTER_RESET_ACTIONS = {"dance", "dun", "greet", "jump", "scratch", "normal", "idle",
-                        "punch", "kick", "block", "hit"}
+# 移动类动作（forward/back 向前走/向后走）结束后保持当前位置；
+# 攻击类动作（punch/kick/block/hit）保持当前位置——便于"走到对手面前出拳/踢腿"
+CENTER_RESET_ACTIONS = {"dance", "dun", "greet", "jump", "scratch", "normal", "idle"}
 FPS = 45
 
 REC_FS = 16000
@@ -209,6 +220,9 @@ DRAG_EASE = 0.18        # 拖拽缓动系数（越大越跟手）
 MIN_GAP = 220.0         # 两偶最小间距（防重叠）
 
 action_queue = queue.Queue()
+# [剧本集成] 右偶专用队列：剧本播放时按角色把动作/台词投给右偶；
+# 非双偶布局时没有消费者，ScriptPlayer 会自动把右偶台词回落到左队列。
+action_queue_right = queue.Queue()
 last_question_time = time.time()
 dh_system = None
 gesture_recognizer = None   # [GESTURE]
@@ -224,8 +238,12 @@ PUPPET_ROLES_PATH = Path("puppet_roles.json")  # [角色切换] 持久化文件
 SCRIPT_MODE_ENABLED = True  # True=拦截剧本命令，False=全部交给 Agent
 script_system = None
 
-# [分享卡片] 全局分享系统实例
+# [视频集成] 全局视频播放系统实例（首次用到“视频”指令时懒加载联网）
+video_system = None
+
+# [分享卡片] 全局分享系统实例与开关（默认关闭，点击底部“分享卡片”按钮开启）
 share_system = None
+SHARE_MODE_ENABLED = False
 
 
 def load_puppet_roles():  # [角色切换]
@@ -262,18 +280,13 @@ def save_puppet_roles(left, right):  # [角色切换]
 def enqueue_gesture_action(hand: str, gesture_name: str):  # [GESTURE]
     """摄像头检测到手势后回调：把动作投入目标人偶的队列（线程安全）。
 
-    hand: "left"/"right"/"unknown"/"both"。
-    left/unknown -> 左偶（新悟空）；right -> 右偶（牛魔王）；both -> 两只偶同时做。
+    hand: "left"/"right"/"unknown"。
+    left/unknown -> 左偶（新悟空）；right -> 右偶（牛魔王）。
     """
     entry = GESTURE_ACTION_MAP.get(gesture_name)
     if not entry:
         return
     action_path, reply = entry
-    if hand == "both" and len(PUPPETS) >= 2:
-        print(f"[GESTURE] 双手手势 '{gesture_name}' 触发动作: {action_path} -> 两人偶")
-        for pup in PUPPETS:
-            pup.queue.put(([action_path], reply))
-        return
     target = (PUPPETS[1] if len(PUPPETS) > 1 and hand == "right"
               else PUPPETS[0] if PUPPETS else None)
     if target is None:
@@ -330,11 +343,128 @@ def initialize_script_system():
         engine = getattr(dh_system, "skill_engine", None) if dh_system else None
         llm_client = getattr(dh_system, "_ollama_client", None) if dh_system else None
         script_system = create_script_system(ACTION_MAP, action_queue, FPS,
-                                             engine=engine, llm_client=llm_client)
+                                             engine=engine, llm_client=llm_client,
+                                             right_queue=action_queue_right)
+        script_system.player.has_right_puppet = len(PUPPETS) > 1
         print("[剧本] 剧本系统初始化完成")
     except Exception as e:
         print(f"[剧本] 初始化失败: {e}")
         script_system = None
+
+# [视频集成] 初始化视频播放系统（不联网，首次用到“视频”指令时才抓取）
+def initialize_video_system():
+    global video_system
+    if not VIDEO_SYSTEM_AVAILABLE:
+        print("[视频] 视频系统不可用")
+        video_system = None
+        return
+    try:
+        engine = getattr(dh_system, "skill_engine", None) if dh_system else None
+        llm_client = getattr(dh_system, "_ollama_client", None) if dh_system else None
+        video_system = create_video_player_system(ACTION_MAP, action_queue, FPS,
+                                                  engine=engine, llm_client=llm_client)
+        print("[视频] 视频播放系统初始化完成")
+    except Exception as e:
+        print(f"[视频] 初始化失败: {e}")
+        video_system = None
+
+
+def _video_active() -> bool:
+    """视频是否正在下载/播放（用于切换双偶布局与接管视频控件）。"""
+    if video_system is None:
+        return False
+    player = getattr(video_system, "player", None)
+    if player is None:
+        return False
+    return bool(getattr(player, "has_video", False) or getattr(player, "is_downloading", False))
+
+
+def _script_active() -> bool:
+    """剧本是否正在播放/暂停（用于播放期间切换到双偶布局）。"""
+    if script_system is None:
+        return False
+    player = getattr(script_system, "player", None)
+    if player is None:
+        return False
+    return bool(getattr(player, "is_playing", False) or getattr(player, "is_paused", False))
+
+
+def handle_video_command(text: str) -> bool:
+    """处理含“视频”关键词的指令；返回 True 表示已接管。
+
+    指令形如：视频目录 / 播放视频 <名称> / 暂停视频 / 继续视频 / 停止视频 / 视频状态。
+    首次调用会懒加载联网（检查网络 + 抓取或加载缓存）。
+    """
+    if video_system is None:
+        action_queue.put((["idle"], "视频系统未初始化或不可用"))
+        return True
+
+    # 首次使用：联网检查 + 抓取/加载本地缓存
+    if not getattr(video_system, "_network_checked", False):
+        try:
+            ok, msg = video_system.initialize_network()
+        except Exception as e:  # noqa: BLE001
+            ok, msg = False, f"视频系统异常: {e}"
+        if not ok:
+            action_queue.put((["idle"], msg or "请连接网络"))
+            return True
+
+    cmd = text.replace("视频", "").strip()
+    try:
+        if any(k in cmd for k in ("目录", "列表")) or cmd == "":
+            action_queue.put((["idle"], video_system.list_plays()))
+            return True
+        if "暂停" in cmd:
+            if video_system.player.is_playing:
+                video_system.pause()
+                action_queue.put((["idle"], "⏸️ 已暂停"))
+            else:
+                action_queue.put((["idle"], "⚠️ 没有播放中的视频"))
+            return True
+        if "继续" in cmd:
+            if video_system.player.is_paused:
+                video_system.play()
+                action_queue.put((["idle"], "▶️ 继续播放"))
+            else:
+                action_queue.put((["idle"], "⚠️ 没有暂停的视频"))
+            return True
+        if "停止" in cmd or "退出" in cmd:
+            video_system.stop()
+            action_queue.put((["idle"], "⏹️ 已停止视频"))
+            return True
+        if "状态" in cmd:
+            if video_system.current_script:
+                status = video_system.get_status()
+                msg = f"《{video_system.current_script.title}》"
+                if status.get("is_playing"):
+                    msg += f" ▶️ {int(status.get('progress', 0) * 100)}%"
+                elif status.get("is_paused"):
+                    msg += " ⏸️ 暂停"
+                else:
+                    msg += " ⏹️ 停止"
+                action_queue.put((["idle"], msg))
+            else:
+                action_queue.put((["idle"], "📭 没有视频"))
+            return True
+        # 播放/表演（放在暂停/继续/停止之后，避免“继续播放”被误判为换片）
+        if any(k in cmd for k in ("播放", "表演")):
+            name = cmd.replace("播放", "").replace("表演", "").strip()
+            if name:
+                video_system.load_and_play(name)
+            elif video_system.current_script:
+                video_system.play()
+                action_queue.put((["idle"], f"▶️ 继续播放《{video_system.current_script.title}》"))
+            else:
+                action_queue.put((["idle"], "请指定视频名称，例如“播放视频 闹龙宫”"))
+            return True
+        # 只说了“视频”未带子指令
+        action_queue.put((["idle"],
+                          "视频指令：视频目录 / 播放视频 <名称> / 暂停视频 / 继续视频 / 停止视频 / 视频状态"))
+        return True
+    except Exception as e:  # noqa: BLE001
+        print(f"[视频错误] {e}")
+        action_queue.put((["idle"], f"❌ 视频操作失败: {str(e)[:30]}"))
+        return True
 
 # [分享卡片] 初始化分享系统（优先复用 Agent 的知识库与大模型客户端）
 def initialize_share_system():
@@ -440,27 +570,39 @@ def create_output_box(width, height):
 
 def process_and_enqueue(text: str):
 
-    global last_recognized_text, recognized_text_timer, last_question_time, script_system, SCRIPT_MODE_ENABLED, share_system
+    global last_recognized_text, recognized_text_timer, last_question_time, script_system, SCRIPT_MODE_ENABLED, share_system, SHARE_MODE_ENABLED
 
     text = text.strip()
     if not text:
         print("[Agent] 输入为空，忽略。")
         return
 
-    # ========== 1. 剧本命令处理（最高优先级） ==========
-    if script_system is not None and SCRIPT_MODE_ENABLED:
-        # [分享卡片] 分享意图优先（仅在剧本模式下、关键词触发）
-        if share_system is not None and share_system.is_share_intent(text):
-            print(f"[分享] 触发分享生成: {text}")
-            try:
-                share_system.handle(text, script_system.current_script)
-            except Exception as e:  # noqa: BLE001
-                print(f"[分享错误] {e}")
-                action_queue.put((["idle"], f"❌ 分享生成失败: {str(e)[:30]}"))
-            last_recognized_text = ""
-            recognized_text_timer = 0
-            return
+    # ========== 1. 视频命令处理（含“视频”且带子指令时优先，剧本模式下同样可用） ==========
+    _VIDEO_CMDS = ("目录", "列表", "播放", "表演", "暂停", "继续", "停止", "退出", "状态")
+    if (video_system is not None and "视频" in text
+            and (text.strip() == "视频" or any(k in text for k in _VIDEO_CMDS))):
+        print(f"[视频] 拦截命令: {text}")
+        handle_video_command(text)
+        last_recognized_text = ""
+        recognized_text_timer = 0
+        return
 
+    # ========== 1.5 分享卡片（按钮开启后可触发；剧本模式下说出关键词同样可触发） ==========
+    if share_system is not None and (SHARE_MODE_ENABLED or SCRIPT_MODE_ENABLED) \
+            and share_system.is_share_intent(text):
+        print(f"[分享] 触发分享生成: {text}")
+        _cur_script = script_system.current_script if script_system is not None else None
+        try:
+            share_system.handle(text, _cur_script)
+        except Exception as e:  # noqa: BLE001
+            print(f"[分享错误] {e}")
+            action_queue.put((["idle"], f"❌ 分享生成失败: {str(e)[:30]}"))
+        last_recognized_text = ""
+        recognized_text_timer = 0
+        return
+
+    # ========== 2. 剧本命令处理（最高优先级） ==========
+    if script_system is not None and SCRIPT_MODE_ENABLED:
         is_script = any(kw in text for kw in
                         ["剧本", "播放", "表演", "暂停", "继续", "停止", "状态", "目录", "列表"])
         if is_script:
@@ -789,6 +931,32 @@ def load_frames(json_list):
 
     return frames, init_joints, w, h
 
+def _mirror_clip_motion(frames):
+    """把整段片段（待机或动作）的水平位移取反，供镜像朝向的人偶使用。
+
+    以片段首帧骨盆 x 为轴，逐帧把全部关节的 x 平移 -2Δ(t)（Δ 为该帧骨盆相对首帧的位移）。
+    片段内部「关节相对骨盆」的形态完全不变，所以渲染时的整体镜像照旧负责翻转朝向；
+    只有骨盆的行进轨迹被反向——否则镜像人偶做「向前走」会朝背面走（倒着走）。
+    """
+    if not frames:
+        return
+    first = frames[0].get('joints', {}).get('pelvis')
+    if not first:
+        return
+    x0 = first['x']
+    prev_dx = 0.0
+    for fr in frames:
+        joints = fr.get('joints', {})
+        pelvis = joints.get('pelvis')
+        dx = 2.0 * (pelvis['x'] - x0) if pelvis else prev_dx
+        prev_dx = dx
+        if not dx:
+            continue
+        for pos in joints.values():
+            if pos:
+                pos['x'] -= dx
+
+
 class Puppet:
     """单个人偶状态机：负责 idle 循环、动作播放、位移与手势/文本队列。
 
@@ -797,16 +965,19 @@ class Puppet:
     从而实现左右手分别操控两个人偶。
     """
 
-    def __init__(self, name, mats, cfg, idle_file, x_shift=0.0, q=None):
+    def __init__(self, name, mats, cfg, idle_file, x_shift=0.0, q=None, motion_mirror=False):
         self.name = name
         self.mats = mats                # 该人偶的角色素材
         self.cfg = cfg                  # 该人偶的渲染配置快照（枢轴/旋转/镜像）
         self.x_shift = x_shift          # 起始站位水平偏移（左偶偏左/右偶偏右）
         self.center_reset = CENTER_RESET_ACTIONS
+        self.motion_mirror = bool(motion_mirror)  # 渲染朝向为镜像时，动作的水平位移需一并取反
 
         frames, init_joints, fw, fh = load_frames([str(idle_file)])
         if not frames:
             raise ValueError(f"{name}: Idle 动画加载失败")
+        if self.motion_mirror:
+            _mirror_clip_motion(frames)   # 首帧 Δ=0，不影响 init_joints 基线
         self.idle_frames = frames
         self.init_joints_idle = init_joints
         self.center_x, self.center_y = fw // 2, fh // 2
@@ -848,8 +1019,12 @@ class Puppet:
         with self._drag_lock:
             return self.last_pelvis_abs['x'] + self.drag_offset['x']
 
-    def _dequeue_action(self):
-        """空闲时若有请求则加载动作进入 action 状态。返回 (是否处理, 回复文本)。"""
+    def _dequeue_action(self, w, h):
+        """空闲时若有请求则加载动作进入 action 状态。返回 (是否处理, 回复文本)。
+
+        w/h 为窗口尺寸，用于动作结束后的位置钳制（不能用动作文件的 resolution：
+        动作 JSON 是 720x1280 的素材尺寸，用它钳制会把人物卡在窗口中心/边缘）。
+        """
         if self.state != 'idle' or self.queue.empty():
             return False, None
         acts, reply = self.queue.get()
@@ -887,6 +1062,8 @@ class Puppet:
             print(f"[{self.name}] 加载新动作序列: {json_list}")
             loaded_frames, first_segment_joints_original, loaded_w, loaded_h = load_frames(json_list)
             if loaded_frames:
+                if self.motion_mirror:
+                    _mirror_clip_motion(loaded_frames)   # 镜像偶：位移取反（首帧基线不受影响）
                 self.action_frames = loaded_frames
                 self.action_initial_joints = first_segment_joints_original
                 raw_start_pelvis = self.action_initial_joints.get(
@@ -901,8 +1078,8 @@ class Puppet:
                     'y': last_frame_pelvis['y'] + self.current_offset['y'],
                 }
                 # 边界钳制：动作结束后的位置不得越出窗口（防连续"向前走/向后走"走出界面）
-                self.last_pelvis_abs['x'] = max(0.0, min(float(loaded_w), self.last_pelvis_abs['x']))
-                self.last_pelvis_abs['y'] = max(0.0, min(float(loaded_h), self.last_pelvis_abs['y']))
+                self.last_pelvis_abs['x'] = max(0.0, min(float(w), self.last_pelvis_abs['x']))
+                self.last_pelvis_abs['y'] = max(0.0, min(float(h), self.last_pelvis_abs['y']))
                 self.state = 'action'
                 self.action_idx = 0
                 self.json_list = json_list
@@ -919,7 +1096,7 @@ class Puppet:
     def update(self, w, h):
         """推进一帧；返回 (渲染用关节字典 或 None, 新回复文本 或 None)。"""
         reply_new = None
-        loaded, r = self._dequeue_action()
+        loaded, r = self._dequeue_action(w, h)
         if loaded and r:
             reply_new = r
 
@@ -984,10 +1161,27 @@ class Puppet:
         return joints_for_render, reply_new
 
 
+def _fit_window_size(logical_w: int, logical_h: int) -> tuple:
+    """按当前桌面大小算一个能完整放下的初始窗口尺寸（保持逻辑画布宽高比）。
+
+    解决高分屏/小屏上窗口高出屏幕、底部按钮看不见的问题。
+    """
+    try:
+        sizes = pygame.display.get_desktop_sizes()
+        dw, dh = sizes[0] if sizes else (logical_w, logical_h)
+    except Exception:  # noqa: BLE001
+        dw, dh = logical_w, logical_h
+    # 预留任务栏与窗口边框空间
+    max_w = max(320, int(dw * 0.94))
+    max_h = max(240, int(dh * 0.90))
+    scale = min(max_w / logical_w, max_h / logical_h, 1.0)
+    return max(320, int(logical_w * scale)), max(240, int(logical_h * scale))
+
+
 def pygame_loop():
     global is_recording, last_recognized_text, recognized_text_timer, input_text, typing, ime_composing_text, \
            gesture_mode_on, gesture_recognizer, PUPPETS, CHAR_PUPPET0, CHAR_PUPPET1, \
-           script_system, SCRIPT_MODE_ENABLED, share_system
+           script_system, SCRIPT_MODE_ENABLED, share_system, SHARE_MODE_ENABLED
 
     print("初始化 Pygame 及资源...")
     pygame.init()
@@ -1015,8 +1209,52 @@ def pygame_loop():
         return
 
     print("设置 Pygame 窗口和资源...")
-    screen = pygame.display.set_mode((w, h))
+    # [窗口自适应] 逻辑画布固定为动作分辨率，所有布局按逻辑坐标绘制；
+    # 实际窗口按桌面大小缩放到合适尺寸并允许自由拖拽，最后统一缩放呈现。
+    logical_w, logical_h = w, h
+    win_w, win_h = _fit_window_size(logical_w, logical_h)
+    display = pygame.display.set_mode((win_w, win_h), pygame.RESIZABLE)
     pygame.display.set_caption("皮影数字人 (文本: Tab/回车, 语音: Space)")
+    screen = pygame.Surface((logical_w, logical_h)).convert()
+    print(f"[窗口] 逻辑画布 {logical_w}x{logical_h}，初始窗口 {win_w}x{win_h}（可拖拽缩放）")
+
+    _scaled_surface = None
+    _scaled_size = (0, 0)
+
+    def _view_transform():
+        """返回 (缩放比例, X偏移, Y偏移)：逻辑画布 -> 实际窗口的等比映射。"""
+        dw, dh = display.get_size()
+        scale = min(dw / logical_w, dh / logical_h)
+        return scale, (dw - logical_w * scale) / 2.0, (dh - logical_h * scale) / 2.0
+
+    def _to_logical(pos):
+        """窗口坐标 -> 逻辑坐标（用于鼠标命中的反向映射）。"""
+        scale, ox, oy = _view_transform()
+        if scale <= 0:
+            return pos
+        return ((pos[0] - ox) / scale, (pos[1] - oy) / scale)
+
+    def _logical_rect_to_window(rect):
+        """逻辑矩形 -> 窗口矩形（用于输入法候选框定位）。"""
+        scale, ox, oy = _view_transform()
+        return pygame.Rect(int(ox + rect.x * scale), int(oy + rect.y * scale),
+                           max(1, int(rect.w * scale)), max(1, int(rect.h * scale)))
+
+    def _present():
+        """把逻辑画布等比缩放并居中呈现到实际窗口（多余区域留黑边）。"""
+        nonlocal _scaled_surface, _scaled_size
+        dw, dh = display.get_size()
+        scale = min(dw / logical_w, dh / logical_h)
+        sw, sh = max(1, int(logical_w * scale)), max(1, int(logical_h * scale))
+        if _scaled_surface is None or (sw, sh) != _scaled_size:
+            _scaled_surface = pygame.Surface((sw, sh)).convert()
+            _scaled_size = (sw, sh)
+        if (sw, sh) == (logical_w, logical_h):
+            _scaled_surface.blit(screen, (0, 0))
+        else:
+            pygame.transform.smoothscale(screen, (sw, sh), _scaled_surface)
+        display.fill((0, 0, 0))
+        display.blit(_scaled_surface, ((dw - sw) // 2, (dh - sh) // 2))
     _tk_root = None
     if HAS_TKINTER:
         try:
@@ -1050,38 +1288,66 @@ def pygame_loop():
     clock = pygame.time.Clock()
 
 
-    input_box_scale = 0.62
-    input_box_height = int(245 * input_box_scale)
-    input_box_width = max(950, w - 180)
-    input_box_x = (w - input_box_width - 130) // 2
-    input_box_y = h - input_box_height - 10
-    input_box_img = create_input_box(input_box_width, input_box_height)
-    input_box_rect = pygame.Rect(input_box_x, input_box_y, input_box_width, input_box_height)
+    # ===== 底部区域：左侧输入框 + 右侧按钮列（两者同高同底，一起撑满底部）=====
+    input_box_img = None
+    input_box_rect = None
+    input_box_x = input_box_y = input_box_width = input_box_height = 0
+    input_text_rect = None
     input_text_offset_x = 15
-    input_text_offset_y = (input_box_height - input_font.get_sized_height(18)) // 2
+    input_text_offset_y = 16  # 文本靠上，底部留给按钮行
+    toolbar_h = 52
+    toolbar_y = toolbar_x = 0
+    gesture_button_rect = script_button_rect = share_button_rect = None
+    button_rect = cur_char_rect = left_char_rect = right_char_rect = None
 
-    button_height = input_box_height - 10
-    button_width = 110
-    button_x = input_box_x + input_box_width + 10
-    button_y = input_box_y + 5
-    button_rect = pygame.Rect(button_x, button_y, button_width, button_height)
+    def _layout_bottom():
+        """重算底部：左侧整块输入框；右侧「人偶」叠在「文字模式」正上方，文字模式与框等高。"""
+        nonlocal input_box_img, input_box_rect, input_box_x, input_box_y, \
+            input_box_width, input_box_height, input_text_rect, \
+            toolbar_y, toolbar_x, gesture_button_rect, script_button_rect, \
+            share_button_rect, button_rect, cur_char_rect, left_char_rect, right_char_rect
+        margin = 15
+        gap = 12
+        pad_x = 18
+        input_box_height = 120
+        input_box_y = h - input_box_height - margin
 
-    # [GESTURE] 手势控制按钮：置于输入模式按钮正上方
-    gesture_button_height = 50
-    gesture_button_rect = pygame.Rect(button_x, button_y - gesture_button_height - 8,
-                                      button_width, gesture_button_height)
+        # 右侧按钮：文字模式与输入框等高且右对齐；人偶/左右偶叠在其正上方
+        btn_w = 120
+        char_h = 48
+        btn_x = w - margin - btn_w
+        button_rect = pygame.Rect(btn_x, input_box_y, btn_w, input_box_height)
+        if gesture_mode_on:
+            left_char_rect = pygame.Rect(btn_x, input_box_y - 2 * (char_h + gap), btn_w, char_h)
+            right_char_rect = pygame.Rect(btn_x, input_box_y - (char_h + gap), btn_w, char_h)
+            cur_char_rect = left_char_rect
+        else:
+            cur_char_rect = pygame.Rect(btn_x, input_box_y - char_h - gap, btn_w, char_h)
+            left_char_rect = cur_char_rect
+            right_char_rect = cur_char_rect
 
-    # [角色切换] 左右偶角色按钮，叠放在手势按钮上方
-    char_button_height = 50
-    left_char_rect = pygame.Rect(button_x, gesture_button_rect.y - char_button_height - 8,
-                                 button_width, char_button_height)
-    right_char_rect = pygame.Rect(button_x, left_char_rect.y - char_button_height - 8,
-                                  button_width, char_button_height)
+        # 输入框：从左边距排到按钮列左侧
+        input_box_x = margin
+        input_box_width = btn_x - gap - input_box_x
+        input_box_img = create_input_box(input_box_width, input_box_height)
+        input_box_rect = pygame.Rect(input_box_x, input_box_y, input_box_width, input_box_height)
 
-    # [剧本集成] 剧本模式切换按钮：叠放在右偶按钮上方
-    script_button_height = 50
-    script_button_rect = pygame.Rect(button_x, right_char_rect.y - script_button_height - 8,
-                                     button_width, script_button_height)
+        # 框内左下角工具栏：手势交互 / 剧本 / 分享卡片
+        toolbar_h_ = 52
+        toolbar_y = input_box_y + input_box_height - toolbar_h_ - 12
+        toolbar_x = input_box_x + 15
+        _gw = input_font.get_rect("手势交互：关").width + pad_x * 2
+        _sw = input_font.get_rect("剧本：关").width + pad_x * 2
+        _shw = input_font.get_rect("分享卡片").width + pad_x * 2
+        gesture_button_rect = pygame.Rect(toolbar_x, toolbar_y, _gw, toolbar_h_)
+        script_button_rect = pygame.Rect(gesture_button_rect.right + gap, toolbar_y, _sw, toolbar_h_)
+        share_button_rect = pygame.Rect(script_button_rect.right + gap, toolbar_y, _shw, toolbar_h_)
+
+        # 文本输入可点击区域（不含底部按钮行），避免点按钮时误激活输入
+        input_text_rect = pygame.Rect(input_box_x, input_box_y, input_box_width,
+                                      input_box_height - toolbar_h_ - 12)
+
+    _layout_bottom()
 
     output_box_img = None
     output_box_rect = None
@@ -1095,9 +1361,25 @@ def pygame_loop():
     ime_composing_text = ""  # 输入法组合中的拼音（TEXTEDITING 事件）
     input_mode = "text" # 当前输入模式: "text" 或 "voice"
 
+    def _clean_reply(text):
+        """清理回复中的 markdown 特殊符号，只保留可读正文（UI 与 TTS 共用）。"""
+        if not text:
+            return text or ""
+        t = str(text)
+        t = re.sub(r"!\[[^\]]*\]\([^)]*\)", "", t)   # 图片 ![alt](url)
+        t = re.sub(r"\[([^\[\]]*)\]\([^)]*\)", r"\1", t)  # 链接 [text](url) -> text
+        t = re.sub(r"`{1,3}", "", t)                   # 代码块/行内代码 `或者 ```
+        t = re.sub(r"\*{1,3}", "", t)                  # *** / ** / *
+        t = re.sub(r"[_~]+", "", t)                    # 下划线 / 删除线 ~~
+        t = re.sub(r"^#{1,6}\s*", "", t, flags=re.M)   # 标题 # ## ###
+        t = re.sub(r"^>\s*", "", t, flags=re.M)        # 引用 >
+        t = re.sub(r"[|\[\]]", "", t)                  # 表格分隔符与残留括号
+        return t.strip()
+
     def _show_reply(reply):
         """某个人偶触发的回复：更新共享输出框并 TTS 播报。"""
         nonlocal text_reply, output_visible, output_fade_timer
+        reply = _clean_reply(reply)
         text_reply = reply or ""
         output_visible = bool(reply)
         output_fade_timer = OUTPUT_FADE_DURATION if output_visible else 0
@@ -1138,28 +1420,43 @@ def pygame_loop():
     puppet1 = None
     mirror1 = True
 
-    def _build_puppet(name, side, x_shift):  # [角色切换]
-        """按角色名构建一只偶；side=0 左 / 1 右。失败返回 None。"""
+    def _build_puppet(name, side, x_shift, motion_mirror=None):  # [角色切换]
+        """按角色名构建一只偶；side=0 左 / 1 右。失败返回 None。
+
+        motion_mirror: 该偶渲染朝向是否为镜像；None 表示按角色自身配置判断（左偶）。
+        镜像朝向的偶需把动作的水平位移一并取反，否则"向前走"会背对对手走。
+        """
         setup = pg_base.character_setup(name)
         if not setup:
             return None
-        q = action_queue if side == 0 else None
+        if motion_mirror is None:
+            motion_mirror = bool(setup[1].get("scene_mirror", False))
+        q = action_queue if side == 0 else action_queue_right
         return Puppet(f"{'左' if side == 0 else '右'}/{name}", setup[0], setup[1],
-                      idle_file=idle_file, x_shift=x_shift, q=q)
+                      idle_file=idle_file, x_shift=x_shift, q=q,
+                      motion_mirror=motion_mirror)
 
     def _build_layout():  # [布局]
-        """按 gesture_mode_on 重建布局：常态=单个居中；手势=左右两只对峙。"""
+        """按 gesture_mode_on / 视频播放 / 剧本播放 重建布局：常态=单个居中；双人=左右对峙。"""
         nonlocal puppet0, puppet1, mirror1
-        left_shift = -gap_x if gesture_mode_on else 0.0
+        va = _video_active()
+        sa = _script_active()
+        dual_mode = gesture_mode_on or va or sa
+        # 视频播放时把两偶拉得更开，避免挡住中间的视频画面
+        gap = max(gap_x, int(w * 0.36)) if va else gap_x
+        left_shift = -gap if dual_mode else 0.0
         p0 = _build_puppet(CHAR_PUPPET0, 0, left_shift)
         if p0 is None:
             print(f"[布局] 左偶角色 '{CHAR_PUPPET0}' 不可用，回退当前角色")
-            p0 = Puppet(f"左/{CHAR_PUPPET0}", mats, pg_base.capture_config(),
-                        idle_file=idle_file, x_shift=left_shift, q=action_queue)
+            fb_cfg = pg_base.capture_config()
+            p0 = Puppet(f"左/{CHAR_PUPPET0}", mats, fb_cfg,
+                        idle_file=idle_file, x_shift=left_shift, q=action_queue,
+                        motion_mirror=bool(fb_cfg.get("scene_mirror", False)))
         puppet0 = p0
         puppet1 = None
-        if gesture_mode_on:
-            p1 = _build_puppet(CHAR_PUPPET1, 1, gap_x)
+        if dual_mode:
+            p1 = _build_puppet(CHAR_PUPPET1, 1, gap,
+                               motion_mirror=not bool(puppet0.cfg["scene_mirror"]))
             if p1 is None:
                 print(f"[布局] 警告: 未找到右偶角色 '{CHAR_PUPPET1}'，仅单人偶运行。")
             puppet1 = p1
@@ -1168,7 +1465,10 @@ def pygame_loop():
         if puppet1:
             PUPPETS.append(puppet1)
         mirror1 = not bool(puppet0.cfg["scene_mirror"])
-        print(f"[布局] {'双人偶（手势）' if gesture_mode_on else '单人偶（常态）'}，左偶={CHAR_PUPPET0}")
+        # [剧本集成] 同步右偶可用性，供播放器决定台词是否投右队列
+        if script_system is not None:
+            script_system.player.has_right_puppet = puppet1 is not None
+        print(f"[布局] {'双人偶' if dual_mode else '单人偶（常态）'}，左偶={CHAR_PUPPET0}")
 
     def _cycle_character(side, delta):  # [角色切换]
         """在 CHARACTERS 中循环切换指定侧的偶角色，并持久化后重建布局。"""
@@ -1198,6 +1498,13 @@ def pygame_loop():
     print("初始化完成，开始主循环...")
     running = True
     card_disp = None  # [分享卡片] 弹层缩放缓存 (原始Surface, 缩放后Surface, x, y)
+    video_was_active = False  # [视频集成] 用于检测视频开始/结束并切换布局
+    script_was_active = False  # [剧本集成] 用于检测剧本开始/结束并切换布局
+    # [GESTURE] 摄像头预览位置与拖动状态
+    preview_pos = [10, 10]
+    preview_rect = None
+    preview_dragging = False
+    preview_drag_offset = (0, 0)
     while running:
         delta_time = clock.tick(FPS) / 1000.0 
 
@@ -1207,7 +1514,42 @@ def pygame_loop():
             gesture_mode_on = False
             gesture_recognizer = None
 
+        # [视频集成] 视频开始/结束 → 重建布局（播放时双偶拉开，结束后恢复）
+        _va = _video_active()
+        if _va != video_was_active:
+            video_was_active = _va
+            try:
+                _build_layout()
+            except Exception as e:  # noqa: BLE001
+                print(f"[布局] 视频模式切换失败: {e}")
+
+        # [剧本集成] 剧本开始/结束 → 重建布局（播放时切双偶，左右角色分演）
+        _sa = _script_active()
+        if _sa != script_was_active:
+            script_was_active = _sa
+            try:
+                _build_layout()
+            except Exception as e:  # noqa: BLE001
+                print(f"[布局] 剧本模式切换失败: {e}")
+
         for ev in pygame.event.get():
+            # [窗口自适应] 用户拖拽改变窗口大小：重建显示表面（逻辑画布不变）
+            if ev.type == pygame.VIDEORESIZE:
+                try:
+                    display = pygame.display.set_mode((max(320, ev.w), max(240, ev.h)),
+                                                      pygame.RESIZABLE)
+                except Exception as e:  # noqa: BLE001
+                    print(f"[窗口] 调整大小失败: {e}")
+                continue
+
+            # [窗口自适应] 鼠标事件坐标从窗口映射回逻辑画布，保证按钮命中正确
+            if ev.type in (pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP, pygame.MOUSEMOTION) \
+                    and hasattr(ev, "pos"):
+                try:
+                    ev.pos = _to_logical(ev.pos)
+                except Exception:  # noqa: BLE001
+                    pass
+
             # [分享卡片] 弹层打开时，点击或 Esc 关闭并吞掉该事件
             if share_system is not None and share_system.is_card_visible():
                 if (ev.type == pygame.KEYDOWN and ev.key == pygame.K_ESCAPE) or \
@@ -1219,17 +1561,38 @@ def pygame_loop():
                 running = False
                 break
 
+            # [GESTURE] 摄像头预览拖动（最优先处理，避免误触其它按钮）
+            if gesture_mode_on and preview_rect is not None:
+                if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1 and preview_rect.collidepoint(ev.pos):
+                    preview_dragging = True
+                    preview_drag_offset = (ev.pos[0] - preview_pos[0], ev.pos[1] - preview_pos[1])
+                    continue
+                if ev.type == pygame.MOUSEMOTION and preview_dragging:
+                    preview_pos[0] = ev.pos[0] - preview_drag_offset[0]
+                    preview_pos[1] = ev.pos[1] - preview_drag_offset[1]
+                    continue
+                if ev.type == pygame.MOUSEBUTTONUP and ev.button == 1 and preview_dragging:
+                    preview_dragging = False
+                    continue
+
             if ev.type == pygame.MOUSEBUTTONDOWN:
-            
+                # [视频集成] 视频控件优先处理（暂停/快退/快进/退出/进度条点击）
+                if _video_active() and video_system is not None and hasattr(video_system, "handle_mouse_click"):
+                    try:
+                        if video_system.handle_mouse_click(ev.pos, w, h):
+                            continue
+                    except Exception as e:  # noqa: BLE001
+                        print(f"[视频] 鼠标处理异常: {e}")
+
                 if ev.button == 1:
                     if input_mode == "text":
-                        if input_box_rect.collidepoint(ev.pos):
+                        if input_text_rect.collidepoint(ev.pos):
                             if not typing:
                                 typing = True
                                 input_text = ""
                                 ime_composing_text = ""
                                 pygame.key.start_text_input()
-                                pygame.key.set_text_input_rect(input_box_rect)  # 候选框跟随输入框
+                                pygame.key.set_text_input_rect(_logical_rect_to_window(input_box_rect))  # 候选框跟随输入框
                                 print("输入框已激活。")
                         elif typing:
                             typing = False
@@ -1281,15 +1644,20 @@ def pygame_loop():
                                 gesture_recognizer = None
                             _build_layout()  # 回到常态：单个居中人偶
                         print(f"[GESTURE] 手势控制: {'开启' if gesture_mode_on else '关闭'}")
+                        _layout_bottom()  # 重排右侧按钮列与输入框（手势模式多一行角色按钮）
 
-                    # [角色切换] 左/右偶角色按钮（Shift+点击反向）
+                    # [角色切换] 常态=切换当前（单个）人偶；手势模式=左右偶分别切换（Shift+点击反向）
                     _rev = -1 if (pygame.key.get_mods() & pygame.KMOD_SHIFT) else 1
-                    if left_char_rect.collidepoint(ev.pos):
-                        _cycle_character(0, _rev)
-                    elif right_char_rect.collidepoint(ev.pos):
-                        _cycle_character(1, _rev)
+                    if gesture_mode_on:
+                        if left_char_rect.collidepoint(ev.pos):
+                            _cycle_character(0, _rev)
+                        elif right_char_rect.collidepoint(ev.pos):
+                            _cycle_character(1, _rev)
+                    else:
+                        if cur_char_rect.collidepoint(ev.pos):
+                            _cycle_character(0, _rev)
 
-                    # [剧本集成] 剧本模式切换按钮
+                    # [剧本集成] 剧本模式切换按钮（底部按钮行）
                     if script_button_rect.collidepoint(ev.pos):
                         SCRIPT_MODE_ENABLED = not SCRIPT_MODE_ENABLED
                         mode_text = "启用" if SCRIPT_MODE_ENABLED else "禁用"
@@ -1297,7 +1665,29 @@ def pygame_loop():
                         last_recognized_text = f"剧本模式已{mode_text}"
                         recognized_text_timer = RECOGNIZED_TEXT_DURATION
 
+                    # [分享卡片] 按钮=开启/关闭分享功能（不直接生成；生成需说出关键词）
+                    if share_button_rect.collidepoint(ev.pos):
+                        if share_system is None:
+                            print("[分享] 分享系统不可用")
+                            last_recognized_text = "分享卡片功能不可用"
+                        else:
+                            SHARE_MODE_ENABLED = not SHARE_MODE_ENABLED
+                            if SHARE_MODE_ENABLED:
+                                last_recognized_text = "分享卡片已开启：说“生成分享卡片”即可制作"
+                            else:
+                                last_recognized_text = "分享卡片已关闭"
+                            print(f"[分享] 分享功能已{'开启' if SHARE_MODE_ENABLED else '关闭'}")
+                        recognized_text_timer = RECOGNIZED_TEXT_DURATION
+
             elif ev.type == pygame.KEYDOWN:
+                # [视频集成] 视频控件优先处理（Esc 退出播放 / ←→ 快退快进）
+                if _video_active() and video_system is not None and hasattr(video_system, "handle_key"):
+                    try:
+                        if video_system.handle_key(ev):
+                            continue
+                    except Exception as e:  # noqa: BLE001
+                        print(f"[视频] 键盘处理异常: {e}")
+
                 if input_mode == "voice" and ev.key == pygame.K_SPACE:
                     toggle_recording()
 
@@ -1307,7 +1697,7 @@ def pygame_loop():
                          input_text = ""
                          ime_composing_text = ""
                          pygame.key.start_text_input()
-                         pygame.key.set_text_input_rect(input_box_rect)  # 候选框跟随输入框
+                         pygame.key.set_text_input_rect(_logical_rect_to_window(input_box_rect))  # 候选框跟随输入框
                          print("输入框已激活 (Tab)。")
                      else:
                          pygame.key.stop_text_input()
@@ -1400,6 +1790,13 @@ def pygame_loop():
                 mirror=mirror1,  # 与左偶反向→对峙
             )
 
+        # [视频集成] 渲染视频画面与控件（居中覆盖，两侧留给人偶）
+        if _video_active() and video_system is not None and hasattr(video_system, "render"):
+            try:
+                video_system.render(screen, w, h, main_font, status_font, UI_COLORS)
+            except Exception as e:  # noqa: BLE001
+                print(f"[视频] 渲染失败: {e}")
+
         if output_visible and text_reply:
             max_text_width = w * 0.95
             padding_x = 20
@@ -1459,61 +1856,70 @@ def pygame_loop():
                  output_box_rect = None
 
 
+        # ===== 输入框：始终绘制（文本区 + 底部按钮行）=====
+        screen.blit(input_box_img, input_box_rect.topleft)
+        text_render_x = input_box_rect.x + input_text_offset_x
+        text_render_y = input_box_rect.y + input_text_offset_y
+
         if input_mode == "text":
-             screen.blit(input_box_img, input_box_rect.topleft)
-             text_render_x = input_box_rect.x + input_text_offset_x
-             text_render_y = input_box_rect.y + input_text_offset_y
+            if typing:
+                input_font.render_to(screen, (text_render_x, text_render_y), input_text, UI_COLORS["text"])
+                if ime_composing_text:
+                    comp_x = text_render_x + input_font.get_rect(input_text).width
+                    prev_underline = input_font.underline
+                    input_font.underline = True
+                    input_font.render_to(screen, (comp_x, text_render_y), ime_composing_text, UI_COLORS["text"])
+                    input_font.underline = prev_underline
+                if int(time.time() * 2) % 2 == 0:
+                    text_surface, text_rect = input_font.render(input_text + ime_composing_text)
+                    cursor_x = text_render_x + text_rect.width + 1
+                    cursor_y1 = text_render_y
+                    cursor_y2 = text_render_y + input_font.get_sized_height(18)
+                    pygame.draw.line(screen, UI_COLORS["dark_red"], (cursor_x, cursor_y1), (cursor_x, cursor_y2), 2)
+            elif not input_text:
+                input_font.render_to(screen, (text_render_x, text_render_y), INPUT_HINT, UI_COLORS["hint_text"])
+        else:  # 语音模式：文本区显示录音状态
+            rec_indicator_x = text_render_x + 6
+            rec_indicator_y = text_render_y + 12
+            rec_color = UI_COLORS["recording_active"] if is_recording else UI_COLORS["recording_idle"]
+            pygame.draw.circle(screen, rec_color, (rec_indicator_x, rec_indicator_y), 7)
+            rec_status_text = "录音中..." if is_recording else "按 '空格' 开始录音"
+            status_font.render_to(screen, (rec_indicator_x + 14, rec_indicator_y - 10),
+                                  rec_status_text, rec_color)
 
-             if typing:
-                 input_font.render_to(screen, (text_render_x, text_render_y), input_text, UI_COLORS["text"])
-                 if ime_composing_text:
-                     comp_x = text_render_x + input_font.get_rect(input_text).width
-                     prev_underline = input_font.underline
-                     input_font.underline = True
-                     input_font.render_to(screen, (comp_x, text_render_y), ime_composing_text, UI_COLORS["text"])
-                     input_font.underline = prev_underline
-                 if int(time.time() * 2) % 2 == 0:
-                     text_surface, text_rect = input_font.render(input_text + ime_composing_text)
-                     cursor_x = text_render_x + text_rect.width + 1
-                     cursor_y1 = text_render_y
-                     cursor_y2 = text_render_y + input_font.get_sized_height(18)
-                     pygame.draw.line(screen, UI_COLORS["dark_red"], (cursor_x, cursor_y1), (cursor_x, cursor_y2), 2)
-             elif not input_text:
-                 input_font.render_to(screen, (text_render_x, text_render_y), INPUT_HINT, UI_COLORS["hint_text"])
-
+        # 右侧：文字/语音模式按钮
         button_color = UI_COLORS["gold"] if input_mode == "voice" else UI_COLORS["button_text"]
         pygame.draw.rect(screen, button_color, button_rect, border_radius=8)
         button_text = "语音模式" if input_mode == "voice" else "文字模式"
-        btn_text_color = UI_COLORS["text_light"]
-        text_surf, text_rect = input_font.render(button_text, btn_text_color)
+        text_surf, text_rect = input_font.render(button_text, UI_COLORS["text_light"])
         text_rect.center = button_rect.center
         screen.blit(text_surf, text_rect)
 
-        # [角色切换] 绘制左/右偶角色按钮
-        for _rect, _side, _name in ((left_char_rect, 0, CHAR_PUPPET0),
-                                    (right_char_rect, 1, CHAR_PUPPET1)):
-            pygame.draw.rect(screen, UI_COLORS["gold"], _rect, border_radius=8)
-            _disp = pg_base.CHAR_DISPLAY.get(_name, _name)
-            _label = f"{'左' if _side == 0 else '右'}偶：{_disp}"
-            _surf, _r = input_font.render(_label, UI_COLORS["button_text"])
-            _r.center = _rect.center
+        # 右侧：角色切换按钮（常态 1 个“人偶”；手势模式 左偶/右偶）
+        if gesture_mode_on:
+            for _rect, _side, _name in ((left_char_rect, 0, CHAR_PUPPET0),
+                                        (right_char_rect, 1, CHAR_PUPPET1)):
+                pygame.draw.rect(screen, UI_COLORS["gold"], _rect, border_radius=8)
+                _disp = pg_base.CHAR_DISPLAY.get(_name, _name)
+                _label = f"{'左' if _side == 0 else '右'}偶：{_disp}"
+                _surf, _r = input_font.render(_label, UI_COLORS["button_text"])
+                _r.center = _rect.center
+                screen.blit(_surf, _r)
+        else:
+            pygame.draw.rect(screen, UI_COLORS["gold"], cur_char_rect, border_radius=8)
+            _disp = pg_base.CHAR_DISPLAY.get(CHAR_PUPPET0, CHAR_PUPPET0)
+            _surf, _r = input_font.render(f"人偶：{_disp}", UI_COLORS["button_text"])
+            _r.center = cur_char_rect.center
             screen.blit(_surf, _r)
 
-        # [GESTURE] 绘制手势控制按钮
+        # 底部按钮行：手势交互 / 剧本 / 分享卡片
         gesture_color = UI_COLORS["red"] if gesture_mode_on else UI_COLORS["button_text"]
         pygame.draw.rect(screen, gesture_color, gesture_button_rect, border_radius=8)
-        gesture_text = "手势控制：开" if gesture_mode_on else "手势控制：关"
+        gesture_text = "手势交互：开" if gesture_mode_on else "手势交互：关"
         g_surf, g_rect = input_font.render(gesture_text, UI_COLORS["text_light"])
         g_rect.center = gesture_button_rect.center
         screen.blit(g_surf, g_rect)
-        if gesture_mode_on:
-            _l = pg_base.CHAR_DISPLAY.get(CHAR_PUPPET0, CHAR_PUPPET0)
-            _r = pg_base.CHAR_DISPLAY.get(CHAR_PUPPET1, CHAR_PUPPET1)
-            hint = f"左手={_l} 右手={_r} 双手=合击" if HAS_GESTURE else "手势不可用"
-            status_font.render_to(screen, (gesture_button_rect.x - 320, gesture_button_rect.centery - 10),
-                                  hint, UI_COLORS["text"])
 
-        # [剧本集成] 绘制剧本模式按钮与当前剧目状态
         script_btn_color = (100, 180, 100) if SCRIPT_MODE_ENABLED else (180, 100, 100)
         pygame.draw.rect(screen, script_btn_color, script_button_rect, border_radius=8)
         pygame.draw.rect(screen, (80, 80, 80), script_button_rect, width=2, border_radius=8)
@@ -1522,25 +1928,33 @@ def pygame_loop():
         s_rect.center = script_button_rect.center
         screen.blit(s_surf, s_rect)
 
+        if share_system is None:
+            share_btn_color = (150, 150, 150)
+        else:
+            share_btn_color = (100, 180, 100) if SHARE_MODE_ENABLED else (180, 100, 100)
+        pygame.draw.rect(screen, share_btn_color, share_button_rect, border_radius=8)
+        pygame.draw.rect(screen, (80, 80, 80), share_button_rect, width=2, border_radius=8)
+        share_btn_text = "分享：开" if SHARE_MODE_ENABLED else "分享：关"
+        sh_surf, sh_rect = input_font.render(share_btn_text, UI_COLORS["text_light"])
+        sh_rect.center = share_button_rect.center
+        screen.blit(sh_surf, sh_rect)
+
+        # 状态提示（按钮行上方）：手势提示右对齐 / 剧目状态左对齐
+        if gesture_mode_on:
+            _l = pg_base.CHAR_DISPLAY.get(CHAR_PUPPET0, CHAR_PUPPET0)
+            _r = pg_base.CHAR_DISPLAY.get(CHAR_PUPPET1, CHAR_PUPPET1)
+            hint = f"左手={_l} 右手={_r} 手势: 握拳=出拳 剪刀V=踢腿 手刀=前进 捏合=后退" if HAS_GESTURE else "手势不可用"
+            _hw = status_font.get_rect(hint).width
+            status_font.render_to(screen, (input_box_rect.right - 15 - _hw, toolbar_y - 20),
+                                  hint, UI_COLORS["text"])
         if script_system and script_system.current_script:
             script_info = f"📜 {script_system.current_script.title}"
             if script_system.player.is_playing:
                 script_info += " ▶"
             elif script_system.player.is_paused:
                 script_info += " ⏸"
-            status_font.render_to(screen, (script_button_rect.x - 240, script_button_rect.centery - 10),
+            status_font.render_to(screen, (toolbar_x, toolbar_y - 20),
                                   script_info, UI_COLORS["script_status"])
-
-        if input_mode == "voice":
-             rec_indicator_x = button_rect.left + 150
-             rec_indicator_y = button_rect.centery
-             rec_color = UI_COLORS["recording_active"] if is_recording else UI_COLORS["recording_idle"]
-             pygame.draw.circle(screen, rec_color, (rec_indicator_x, rec_indicator_y), 7)
-             rec_status_text = "录音中..." if is_recording else "按 '空格' 开始录音"
-             status_font.render_to(screen,
-                                  (rec_indicator_x + 12, rec_indicator_y - 10),
-                                  rec_status_text,
-                                  rec_color)
 
         if recognized_text_timer > 0:
              recognized_text_timer -= 1
@@ -1549,7 +1963,7 @@ def pygame_loop():
                  rec_text_rect.topright = (w - 15, 15)
                  screen.blit(rec_text_surf, rec_text_rect)
 
-        # [GESTURE] 摄像头预览：由主线程把最新帧画到主窗口左上角（避免子线程开 OpenCV 窗口卡死）
+        # [GESTURE] 摄像头预览：主线程绘制到 preview_pos（可拖动，避免子线程开 OpenCV 窗口卡死）
         if gesture_mode_on and gesture_recognizer is not None:
             pv = gesture_recognizer.get_preview_rgb()
             if pv is not None:
@@ -1561,17 +1975,25 @@ def pygame_loop():
                     pv_w = 400
                     pv_h = int(ph * pv_w / pw)
                     pv_surf = pygame.transform.smoothscale(pv_surf, (pv_w, pv_h))
-                    screen.blit(pv_surf, (10, 10))
-                    pygame.draw.rect(screen, UI_COLORS["gold"], (10, 10, pv_w, pv_h), 3)
+                    preview_pos[0] = max(0, min(w - pv_w, preview_pos[0]))
+                    preview_pos[1] = max(0, min(h - pv_h, preview_pos[1]))
+                    preview_rect = pygame.Rect(preview_pos[0], preview_pos[1], pv_w, pv_h)
+                    screen.blit(pv_surf, preview_rect.topleft)
+                    pygame.draw.rect(screen, UI_COLORS["gold"], preview_rect, 3)
                     # 标签放在预览框底部，避免与手势识别文字重叠
-                    status_font.render_to(screen, (14, 10 + pv_h - 22), "摄像头预览", (255, 255, 255))
+                    status_font.render_to(screen, (preview_rect.x + 4, preview_rect.bottom - 22),
+                                          "摄像头预览", (255, 255, 255))
                 except Exception as e:
                     print(f"[GESTURE] 预览渲染失败: {e}")
             else:
                 # 还没收到帧：画占位框
-                pygame.draw.rect(screen, (60, 60, 60), (10, 10, 400, 300))
-                pygame.draw.rect(screen, UI_COLORS["gold"], (10, 10, 400, 300), 3)
-                status_font.render_to(screen, (14, 14), "等待摄像头画面...", (255, 255, 255))
+                preview_rect = pygame.Rect(preview_pos[0], preview_pos[1], 400, 300)
+                pygame.draw.rect(screen, (60, 60, 60), preview_rect)
+                pygame.draw.rect(screen, UI_COLORS["gold"], preview_rect, 3)
+                status_font.render_to(screen, (preview_rect.x + 4, preview_rect.y + 4),
+                                      "等待摄像头画面...", (255, 255, 255))
+        else:
+            preview_rect = None
 
         # [分享卡片] 生成完成后在主线程渲染并弹层显示
         if share_system is not None:
@@ -1603,6 +2025,7 @@ def pygame_loop():
             else:
                 card_disp = None
 
+        _present()
         pygame.display.flip()
 
 
@@ -1637,6 +2060,7 @@ if __name__ == "__main__":
     initialize_agent_system()
     initialize_vosk_model()
     initialize_script_system()  # [剧本集成] 初始化剧本系统
+    initialize_video_system()   # [视频集成] 初始化视频播放系统（首次用到视频指令才联网）
     initialize_share_system()  # [分享卡片] 初始化分享系统
 
     try:
