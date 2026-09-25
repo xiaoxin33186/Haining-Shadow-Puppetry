@@ -370,13 +370,36 @@ def initialize_video_system():
 
 
 def _video_active() -> bool:
-    """视频是否正在下载/播放（用于切换双偶布局与接管视频控件）。"""
+    """视频是否正在加载/播放（用于切换双偶布局与接管视频控件）。
+
+    必须带上 is_extracting_audio：抽音轨阶段 has_video 和 is_downloading 都是 False，
+    漏了它 render() 就不会被调用，player.update() 也跟着不跑，视频永远打不开。
+    """
     if video_system is None:
         return False
     player = getattr(video_system, "player", None)
     if player is None:
         return False
-    return bool(getattr(player, "has_video", False) or getattr(player, "is_downloading", False))
+    return bool(getattr(player, "has_video", False)
+                or getattr(player, "is_downloading", False)
+                or getattr(player, "is_extracting_audio", False))
+
+
+def _video_sound_on() -> bool:
+    """视频音频是否正在响（播放中且未暂停）。
+
+    用于掐断 TTS：视频声音走 pygame 独立 Channel，TTS 走 mixer.music 全局单例，
+    两条管线互不知情，同时出声会叠在一起。这里让视频播放期间 TTS 让路。
+    注意不能用 _video_active()：它把"下载中"也算作活跃，而下载阶段没有声音，TTS 应当照常。
+    """
+    if video_system is None:
+        return False
+    player = getattr(video_system, "player", None)
+    if player is None:
+        return False
+    playing = bool(getattr(player, "is_playing", False))
+    paused = bool(getattr(player, "is_paused", False))
+    return playing and not paused
 
 
 def _script_active() -> bool:
@@ -392,11 +415,28 @@ def _script_active() -> bool:
 def handle_video_command(text: str) -> bool:
     """处理含“视频”关键词的指令；返回 True 表示已接管。
 
-    指令形如：视频目录 / 播放视频 <名称> / 暂停视频 / 继续视频 / 停止视频 / 视频状态。
-    首次调用会懒加载联网（检查网络 + 抓取或加载缓存）。
+    指令形如：视频目录 / 播放视频 <名称> / 视频本地目录 / 播放本地视频 <文件名> /
+    暂停视频 / 继续视频 / 停止视频 / 视频状态。
+    首次调用会懒加载联网（检查网络 + 抓取或加载缓存）；本机视频指令纯本地、不联网。
     """
     if video_system is None:
         action_queue.put((["idle"], "视频系统未初始化或不可用"))
+        return True
+
+    cmd = text.replace("视频", "").strip()
+
+    # 本机视频（download_videos/）：纯本地。必须放在联网检查之前，
+    # 否则断网时那句"请连接网络"会顺手把本机播放一起拦掉。
+    if "本地" in cmd:
+        rest = cmd.replace("本地", "").replace("播放", "").replace("表演", "").strip()
+        try:
+            if not rest or any(k in rest for k in ("目录", "列表")):
+                action_queue.put((["idle"], video_system.list_local_videos()))
+            else:
+                video_system.load_local_file(rest)
+        except Exception as e:  # noqa: BLE001
+            print(f"[视频错误] {e}")
+            action_queue.put((["idle"], f"❌ 本机视频操作失败: {str(e)[:30]}"))
         return True
 
     # 首次使用：联网检查 + 抓取/加载本地缓存
@@ -409,7 +449,6 @@ def handle_video_command(text: str) -> bool:
             action_queue.put((["idle"], msg or "请连接网络"))
             return True
 
-    cmd = text.replace("视频", "").strip()
     try:
         if any(k in cmd for k in ("目录", "列表")) or cmd == "":
             action_queue.put((["idle"], video_system.list_plays()))
@@ -459,7 +498,8 @@ def handle_video_command(text: str) -> bool:
             return True
         # 只说了“视频”未带子指令
         action_queue.put((["idle"],
-                          "视频指令：视频目录 / 播放视频 <名称> / 暂停视频 / 继续视频 / 停止视频 / 视频状态"))
+                          "视频指令：视频目录 / 播放视频 <名称> / 视频本地目录 / "
+                          "播放本地视频 <文件名> / 暂停视频 / 继续视频 / 停止视频 / 视频状态"))
         return True
     except Exception as e:  # noqa: BLE001
         print(f"[视频错误] {e}")
@@ -578,7 +618,7 @@ def process_and_enqueue(text: str):
         return
 
     # ========== 1. 视频命令处理（含“视频”且带子指令时优先，剧本模式下同样可用） ==========
-    _VIDEO_CMDS = ("目录", "列表", "播放", "表演", "暂停", "继续", "停止", "退出", "状态")
+    _VIDEO_CMDS = ("目录", "列表", "播放", "表演", "暂停", "继续", "停止", "退出", "状态", "本地")
     if (video_system is not None and "视频" in text
             and (text.strip() == "视频" or any(k in text for k in _VIDEO_CMDS))):
         print(f"[视频] 拦截命令: {text}")
@@ -1384,7 +1424,10 @@ def pygame_loop():
         output_visible = bool(reply)
         output_fade_timer = OUTPUT_FADE_DURATION if output_visible else 0
         if reply and reply.strip() and HAS_TTS and tts_engine is not None:
-            tts_engine.speak_async(reply)  # TTS 播报
+            if _video_sound_on():
+                print("[TTS] 视频播放中，仅显示文字，跳过语音（避免与视频声音重叠）")
+            else:
+                tts_engine.speak_async(reply)  # TTS 播报
 
     # [拖拽] 连续手部位置 -> 对应偶平移（相对增量，松手保持）
     hand_prev = {"left": None, "right": None, "unknown": None}

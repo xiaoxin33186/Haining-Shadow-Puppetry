@@ -5,17 +5,23 @@
 - 有网络 -> 访问 shadow.caa.edu.cn 抓取"海宁"相关视频标题，存本地缓存
 - "目录"命令：列出所有已获取的视频标题
 - "播放+（名称）"命令：模糊匹配并播放
+- 本机视频：download_videos/ 目录里用户自己放的视频文件，说"视频本地目录"列出、
+  "播放本地视频 <文件名>"播放，不走网络；联网下载的剧目也缓存到同一目录
 - 视频在 pygame 主界面内嵌显示，皮影人站在两侧
 - 支持暂停 / 快进 / 快退 / 进度条 / 右上角退出
+- 声音：ffmpeg 抽音轨 → 独立 Channel 播放（不占用 TTS 的 mixer.music 单例）
 - 下载：后台线程 + 左上角小进度条 + 终端进度行（不依赖 tqdm）
 """
 
 import json
+import re
 import time
+import wave
 import hashlib
-import tempfile
 import urllib.request
 import sys
+import shutil
+import subprocess
 import threading
 from pathlib import Path
 from datetime import datetime
@@ -50,10 +56,79 @@ except ImportError:
 BASE_URL = "https://shadow.caa.edu.cn"
 API_URL = f"{BASE_URL}/api/programme.json"
 CACHE_FILE = Path("video_cache.json")
-TMP_DIR = Path(tempfile.gettempdir()) / "shadow_videos"
+# 视频仓库：既放联网下载的剧目，也放用户自己丢进来的视频文件。
+# 刻意用项目内目录而不是系统 %TEMP%——Windows 存储感知/磁盘清理会回收 %TEMP%，
+# 一旦被清掉，断网时列表里还留着标题却播不出画面。.gitignore 已排除本目录。
+VIDEO_DIR = Path(__file__).resolve().parent / "download_videos"
+# 用户可自行放入的本机视频格式
+LOCAL_VIDEO_EXTS = (".mp4", ".avi", ".mov", ".mkv", ".flv", ".wmv")
 DEFAULT_KEYWORD = "海宁"
 PAGE_SIZE = 12
 NETWORK_TIMEOUT = 5
+
+# 单次 update 最多补读的帧数：落后过多时丢帧追赶，但一轮别读太多把主循环卡住
+MAX_CATCHUP_FRAMES = 5
+# 下载缓存回收阈值：超过这些阈值的下载产物会被回收
+VIDEO_MAX_AGE_DAYS = 7
+VIDEO_MAX_TOTAL_MB = 2048
+# 本程序下载/转码出来的文件名固定是 md5(...)[:12] + 后缀，靠它把"下载产物"和
+# "用户自己放进来的视频"区分开：前者参与回收、不进本机视频列表，后者一律不碰。
+_DOWNLOADED_NAME_RE = re.compile(r"^[0-9a-f]{12}\.(mp4|wav)$")
+
+
+def cleanup_video_dir(max_age_days: int = VIDEO_MAX_AGE_DAYS,
+                      max_total_mb: int = VIDEO_MAX_TOTAL_MB) -> int:
+    """回收联网下载留下的过期 mp4/wav（该目录只增不减）。
+
+    只认本程序生成的下载产物（md5 命名），用户自己放进来的视频一律不碰，
+    否则"清理缓存"会变成删用户素材。
+    两级策略：先删超过 max_age_days 的，再按修改时间从旧到新删到总量低于上限。
+    启动时调用，此时没有视频在播，不必排除占用。
+    """
+    if not VIDEO_DIR.exists():
+        return 0
+    now = time.time()
+    removed = 0
+    kept = []
+    for f in VIDEO_DIR.iterdir():
+        if not f.is_file() or not _DOWNLOADED_NAME_RE.match(f.name):
+            continue          # 非下载产物（用户自放视频）：不参与回收
+        try:
+            if now - f.stat().st_mtime > max_age_days * 86400:
+                f.unlink()
+                removed += 1
+            else:
+                kept.append(f)
+        except OSError:
+            continue
+    total = sum(f.stat().st_size for f in kept if f.exists())
+    limit = max_total_mb * 1024 * 1024
+    for f in sorted(kept, key=lambda p: p.stat().st_mtime):
+        if total <= limit:
+            break
+        try:
+            size = f.stat().st_size
+            f.unlink()
+            total -= size
+            removed += 1
+        except OSError:
+            continue
+    if removed:
+        print(f"[播放器] 已回收 {removed} 个过期下载缓存")
+    return removed
+
+
+def get_ffmpeg_exe() -> Optional[str]:
+    """定位可用的 ffmpeg：优先 imageio-ffmpeg 自带二进制，其次系统 PATH。
+
+    找不到时返回 None，调用方静音降级（与项目其它可选依赖的处理方式一致）。
+    """
+    try:
+        import imageio_ffmpeg
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:
+        pass
+    return shutil.which("ffmpeg")
 
 
 # ---------------- 数据类 ----------------
@@ -220,8 +295,10 @@ class VideoPlayer:
         self.video_fps = 25.0
         self.total_frames = 0
         self.current_frame = 0
-        self.frame_interval = 1.0 / self.video_fps
-        self._last_frame_time = 0.0
+        # 音画同步基准：第 _sync_frame_index 帧对应的墙钟时刻是 _sync_frame_time。
+        # update() 用它推算"此刻应播到第几帧"，掉帧时丢帧追赶，误差不会长期累积。
+        self._sync_frame_index = 0
+        self._sync_frame_time = 0.0
         self._current_rgb = None
         self._current_surface = None
         self.video_width = 0
@@ -229,6 +306,7 @@ class VideoPlayer:
 
         # ===== 异步下载 =====
         self.is_downloading = False
+        self.is_extracting_audio = False   # 下载已完成、正在抽音轨（此时界面单独提示）
         self.download_progress = 0.0
         self.download_done_bytes = 0
         self.download_total_bytes = 0
@@ -238,6 +316,19 @@ class VideoPlayer:
         self._downloaded_path: Optional[Path] = None
         self._download_error: Optional[str] = None
         self._just_finished_flag = False
+
+        # ===== 音频（方案A：ffmpeg 抽音轨 → mixer.Sound + 独立 Channel）=====
+        # 刻意不用 pygame.mixer.music：那是全局单例，已被 tts_engine.py 的语音播报占用，
+        # 共用会在 SDL_mixer 内部锁上互相阻塞（tts_engine.py 第82-85行有踩坑注释）。
+        self._audio_path: Optional[Path] = None
+        self._audio_sound = None
+        self._audio_channel = None
+        self._audio_pcm = None          # int16 PCM 数组，seek 后按采样偏移重建 Sound
+        self._audio_channels = 2
+        self._audio_rate = 44100
+        self._audio_notice: Optional[str] = None   # 音轨异常提示，起播时转成界面消息
+        self.volume = 0.8               # 视频音量 0~1
+        self._duck_until_idle = False   # 起播时 TTS 仍在说话 -> 先压低音量，等它说完
 
     # ---------- 异步加载 ----------
     def load_async(self, video: CurrentVideo) -> bool:
@@ -258,9 +349,31 @@ class VideoPlayer:
             self._download_error = None
 
         self._pending_video = video
-        self.is_downloading = True
         self._just_finished_flag = False
 
+        # 本机文件：不联网，直接进抽音轨阶段，后面的 update() -> _open_local_video 流程完全复用
+        local = self._as_local_file(video.url)
+        if local is not None:
+            print(f"[播放器] 本机文件，跳过下载: {local}")
+            try:
+                size = local.stat().st_size
+            except OSError:
+                size = 0
+            with self._download_lock:
+                self.download_progress = 1.0
+                self.download_done_bytes = size
+                self.download_total_bytes = size
+                self._downloaded_path = local
+            self.is_extracting_audio = True
+            self._download_thread = threading.Thread(
+                target=self._enter_audio_stage,
+                args=(local,),
+                daemon=True,
+            )
+            self._download_thread.start()
+            return True
+
+        self.is_downloading = True
         self._download_thread = threading.Thread(
             target=self._download_worker,
             args=(video.url,),
@@ -269,11 +382,23 @@ class VideoPlayer:
         self._download_thread.start()
         return True
 
+    @staticmethod
+    def _as_local_file(url: str) -> Optional[Path]:
+        """把 url 当本地路径试一下；不是已存在的文件就返回 None。
+
+        联网地址走到这里必然返回 None（Windows 下路径里的 ? 等字符会让 stat 抛错，已兜住）。
+        """
+        try:
+            p = Path(url)
+            return p if p.is_file() else None
+        except (OSError, ValueError):
+            return None
+
     def _download_worker(self, url: str):
         try:
-            TMP_DIR.mkdir(parents=True, exist_ok=True)
+            VIDEO_DIR.mkdir(parents=True, exist_ok=True)
             name = hashlib.md5(url.encode()).hexdigest()[:12] + ".mp4"
-            path = TMP_DIR / name
+            path = VIDEO_DIR / name
 
             if path.exists() and path.stat().st_size > 1024:
                 print(f"[播放器] 复用缓存: {path}")
@@ -282,6 +407,7 @@ class VideoPlayer:
                     self.download_done_bytes = path.stat().st_size
                     self.download_total_bytes = path.stat().st_size
                     self._downloaded_path = path
+                self._enter_audio_stage(path)
                 return
 
             print(f"[播放器] 下载: {url}")
@@ -327,6 +453,8 @@ class VideoPlayer:
                 self.download_progress = 1.0
                 self._downloaded_path = path
 
+            self._enter_audio_stage(path)
+
             mb = path.stat().st_size / 1024 / 1024
             print(f"\n[播放器] 下载完成: {path} ({mb:.1f}MB)")
         except Exception as e:
@@ -334,30 +462,208 @@ class VideoPlayer:
                 self._download_error = str(e)
             print(f"\n[播放器] 下载失败: {e}")
 
-    # ---------- 主循环每帧调用 ----------
-    def update(self):
-        if self.is_downloading:
-            t = self._download_thread
-            if t is not None and not t.is_alive():
-                self.is_downloading = False
-                with self._download_lock:
-                    err = self._download_error
-                    path = self._downloaded_path
-                if err:
-                    print(f"[播放器] 下载出错: {err}")
-                    return
-                if path is not None:
-                    if self._open_local_video(path):
-                        self._just_finished_flag = True
+    def _extract_audio(self, video_path: Path):
+        """把 mp4 的 AAC 音轨抽成 wav（方案A）。在后台下载线程里调用，不阻塞主循环。
+
+        输出固定 44100Hz/16bit/双声道，与 pygame.mixer 默认初始化格式一致，
+        避免 mixer.Sound 载入时因格式不符报错。
+        """
+        exe = get_ffmpeg_exe()
+        if exe is None:
+            print("[播放器] 未找到 ffmpeg，本次静音播放")
+            self._audio_notice = "🔇 未找到 ffmpeg，本视频静音播放"
             return
+        # 音轨名按视频路径取哈希：一来不和用户自放的视频文件同名打架，
+        # 二来符合 _DOWNLOADED_NAME_RE，能被清理逻辑当成下载产物回收
+        wav = VIDEO_DIR / (hashlib.md5(str(video_path).encode("utf-8")).hexdigest()[:12] + ".wav")
+        if wav.exists() and wav.stat().st_size > 1024:
+            self._audio_path = wav
+            self._load_audio_pcm(wav)
+            print(f"[播放器] 复用音轨缓存: {wav.name}")
+            return
+        try:
+            cmd = [exe, "-y", "-loglevel", "error", "-i", str(video_path),
+                   "-vn", "-ac", "2", "-ar", "44100", "-c:a", "pcm_s16le",
+                   "-f", "wav", str(wav)]
+            r = subprocess.run(
+                cmd, capture_output=True, timeout=120,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+            if r.returncode == 0 and wav.exists() and wav.stat().st_size > 1024:
+                self._audio_path = wav
+                self._load_audio_pcm(wav)
+                kb = wav.stat().st_size / 1024
+                print(f"[播放器] 音轨已抽取: {wav.name} ({kb:.0f}KB)")
+            else:
+                print(f"[播放器] 该视频无音轨或抽取失败 (code={r.returncode})")
+                self._audio_notice = "🔇 该视频没有可用音轨，静音播放"
+        except Exception as e:
+            print(f"[播放器] 抽取音轨出错: {e}")
+            self._audio_notice = "🔇 音轨准备失败，本视频静音播放"
+
+    def _enter_audio_stage(self, video_path: Path):
+        """下载结束 → 抽音轨（P4）。单独标记 is_extracting_audio，让界面显示"正在准备音轨"，
+        否则进度条会一直停在 100% 且没有任何反馈。"""
+        self.is_downloading = False
+        self.is_extracting_audio = True
+        self._extract_audio(video_path)
+
+    # ---------- 音频播放 ----------
+    def _load_audio_pcm(self, wav: Path):
+        """把 wav 读成 int16 PCM 数组（P2）。
+
+        单靠 mixer.Sound 无法指定"从第几秒开始播"，有裸露的采样数组才能在 seek 后按偏移
+        重建 Sound。抽取命令固定输出 16bit，若格式不符就放弃定位能力、退回整段播放。
+        在后台线程里调用，不占主循环。
+        """
+        self._audio_pcm = None
+        if not HAS_NUMPY:
+            return
+        try:
+            with wave.open(str(wav), "rb") as wf:
+                if wf.getsampwidth() != 2:
+                    print("[播放器] 音轨非 16bit，跳过 PCM 定位")
+                    return
+                self._audio_channels = wf.getnchannels()
+                self._audio_rate = wf.getframerate()
+                raw = wf.readframes(wf.getnframes())
+            self._audio_pcm = np.frombuffer(raw, dtype=np.int16)
+        except Exception as e:
+            print(f"[播放器] 读取 PCM 失败（本次不做 seek 定位）: {e}")
+            self._audio_pcm = None
+
+    def _start_audio(self):
+        """起播音频：音量按 TTS 是否在说话决定要不要先压低（P5）。"""
+        self._stop_audio()
+        self._duck_until_idle = self._tts_speaking()
+        self._play_audio_from(0.0)
+
+    def _play_audio_from(self, seconds: float):
+        """从 seconds 处开始播音频（P2）；没有 PCM 数组时退回整段从头播。"""
+        if self._audio_path is None or not HAS_PYGAME:
+            return
+        try:
+            if not pygame.mixer.get_init():
+                pygame.mixer.init()
+            if self._audio_pcm is not None and self._audio_pcm.size:
+                start = max(0, int(seconds * self._audio_rate)) * self._audio_channels
+                tail = self._audio_pcm[min(start, self._audio_pcm.size):]
+                if tail.size == 0:
+                    return
+                self._audio_sound = pygame.mixer.Sound(buffer=tail.tobytes())
+            else:
+                self._audio_sound = pygame.mixer.Sound(str(self._audio_path))
+            self._audio_channel = self._audio_sound.play()
+            self._apply_volume()
+            if self._audio_channel is None:
+                print("[播放器] 无空闲音频通道，本次静音")
+        except Exception as e:
+            print(f"[播放器] 音频播放失败: {e}")
+            self._audio_sound = None
+            self._audio_channel = None
+
+    def _stop_audio(self):
+        # 刻意不动 _duck_until_idle：seek 会借道 _stop_audio，别把 ducking 状态清掉
+        if self._audio_channel is not None:
+            try:
+                self._audio_channel.stop()
+            except Exception:
+                pass
+        self._audio_channel = None
+        self._audio_sound = None
+
+    def _sync_audio_to_video(self):
+        """把音频拉到与画面同一时间点（P2：seek 之后调用）。
+
+        暂停状态只重建 Sound 不发声：重建会丢掉原来的 pause，所以补一次 pause。
+        """
+        if not self.is_playing or self._audio_path is None or self._audio_channel is None:
+            return
+        seconds = self.current_frame / max(1e-6, self.video_fps)
+        paused = self.is_paused
+        self._stop_audio()
+        self._play_audio_from(seconds)
+        if paused and self._audio_channel is not None:
+            try:
+                self._audio_channel.pause()
+            except Exception:
+                pass
+
+    # ---------- 音量（P5） ----------
+    @staticmethod
+    def _tts_speaking() -> bool:
+        """TTS 是否正在出声。TTS 走 mixer.music 单例，这里只读状态、不碰播放控制。"""
+        if not HAS_PYGAME:
+            return False
+        try:
+            return bool(pygame.mixer.music.get_busy())
+        except Exception:
+            return False
+
+    def _apply_volume(self):
+        """把 self.volume 落到当前通道上；ducking 期间再乘一个衰减系数。"""
+        if self._audio_channel is None:
+            return
+        factor = 0.3 if self._duck_until_idle else 1.0
+        try:
+            self._audio_channel.set_volume(max(0.0, min(1.0, self.volume)) * factor)
+        except Exception:
+            pass
+
+    def set_volume(self, v: float) -> float:
+        """设置视频音量（0~1），返回生效值。"""
+        self.volume = max(0.0, min(1.0, float(v)))
+        self._apply_volume()
+        return self.volume
+
+    # ---------- 主循环每帧调用 ----------
+    def _anchor_clock(self):
+        """记下"当前帧 = 此刻"这个锚点，供 update() 反推此刻应播到第几帧。
+
+        用锚点+墙钟推算而不是每帧累加间隔，主循环偶尔卡顿后仍能自行追回，
+        误差不会像原来那样永久累积（P3）。
+        """
+        self._sync_frame_index = self.current_frame
+        self._sync_frame_time = time.time()
+
+    def update(self):
+        if self.is_downloading or self.is_extracting_audio:
+            t = self._download_thread
+            if t is not None and t.is_alive():
+                return      # 还在下载/抽音轨：界面继续画进度或"正在准备音轨"
+            # 线程已结束（或已不存在）：清掉标志再走打开流程。
+            # 不能写成"线程死了才清"——标志留着而线程引用没了会永远卡在这里。
+            self.is_downloading = False
+            self.is_extracting_audio = False
+            with self._download_lock:
+                err = self._download_error
+                path = self._downloaded_path
+            if err:
+                print(f"[播放器] 下载出错: {err}")
+                # 断网时列表里还有标题、却点不出画面，这里必须给一句界面提示，否则用户只会看到卡住
+                self.action_queue.put((["idle"], "❌ 视频加载失败（网络不可用或地址已失效）"))
+                return
+            if path is not None:
+                if self._open_local_video(path):
+                    self._just_finished_flag = True
+            return
+
+        # TTS 说完后把音量还回来（起播瞬间它在说话时压低过，P5）
+        if self._duck_until_idle and not self._tts_speaking():
+            self._duck_until_idle = False
+            self._apply_volume()
 
         if not self.is_playing or self.is_paused or self.cap is None:
             return
         now = time.time()
-        if now - self._last_frame_time < self.frame_interval:
+        expected = self._sync_frame_index + int((now - self._sync_frame_time) * self.video_fps)
+        behind = expected - self.current_frame
+        if behind <= 0:
             return
-        self._last_frame_time = now
-        self._read_next_frame()
+        # 落后时丢帧追赶：音频按墙钟走，画面回到墙钟位置即恢复同步
+        for _ in range(min(behind, MAX_CATCHUP_FRAMES)):
+            if not self._read_next_frame():
+                return
 
     def consume_just_finished(self) -> bool:
         if self._just_finished_flag:
@@ -378,13 +684,17 @@ class VideoPlayer:
         self.video_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
         self.video_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
         self.current_frame = 0
-        self.frame_interval = 1.0 / self.video_fps
-        self._last_frame_time = time.time()
         self.is_playing = True
         self.is_paused = False
         print(f"[播放器] {self.video_width}x{self.video_height}@{self.video_fps:.1f}fps "
               f"{self.total_frames}帧")
         self._read_next_frame()
+        self._anchor_clock()
+        self._start_audio()
+        # 音轨有问题时在界面上说一声（不能只打终端）；放在起播之后，顺带被 P1 的 TTS 压制覆盖
+        if self._audio_notice:
+            self.action_queue.put((["idle"], self._audio_notice))
+            self._audio_notice = None
         return self.has_video
 
     def _try_open(self, source):
@@ -407,6 +717,7 @@ class VideoPlayer:
             ok, frame = self.cap.read()
             if not ok:
                 self.is_playing = False
+                self._stop_audio()      # 画面播完，音频同步停止
                 return False
             self._current_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             h, w = self._current_rgb.shape[:2]
@@ -438,11 +749,15 @@ class VideoPlayer:
         if self.cap is not None:
             self.is_playing = True
             self.is_paused = False
-            self._last_frame_time = time.time()
+            self._anchor_clock()
+            if self._audio_channel is not None:
+                self._audio_channel.unpause()
 
     def pause(self):
         if self.is_playing:
             self.is_paused = True
+            if self._audio_channel is not None:
+                self._audio_channel.pause()
 
     def toggle_pause(self):
         if self.is_paused:
@@ -452,6 +767,7 @@ class VideoPlayer:
 
     def stop(self):
         self.is_downloading = False
+        self.is_extracting_audio = False
         self._download_thread = None
         self._pending_video = None
         with self._download_lock:
@@ -461,6 +777,13 @@ class VideoPlayer:
 
         self.is_playing = False
         self.is_paused = False
+        self._stop_audio()
+        self._audio_path = None
+        self._audio_pcm = None
+        self._audio_channels = 2
+        self._audio_rate = 44100
+        self._audio_notice = None
+        self._duck_until_idle = False
         if self.cap is not None:
             try:
                 self.cap.release()
@@ -482,7 +805,8 @@ class VideoPlayer:
             self.cap.set(cv2.CAP_PROP_POS_FRAMES, target)
             self.current_frame = target
             self._read_next_frame()
-            self._last_frame_time = time.time()
+            self._anchor_clock()            # 跳到新位置后重设时基，否则会被判定为落后而狂读帧
+            self._sync_audio_to_video()     # 音频跟到同一时间点，避免音画永久错位（P2）
         except Exception as e:
             print(f"[播放器] 跳转失败: {e}")
 
@@ -495,7 +819,8 @@ class VideoPlayer:
             self.cap.set(cv2.CAP_PROP_POS_FRAMES, target)
             self.current_frame = target
             self._read_next_frame()
-            self._last_frame_time = time.time()
+            self._anchor_clock()
+            self._sync_audio_to_video()     # 拖进度条后音频同步跳转（P2）
         except Exception:
             pass
 
@@ -628,7 +953,7 @@ class VideoPlayerSystem:
 
     def list_plays(self) -> str:
         if not self.videos:
-            return "📭 视频库为空，请先点击模式按钮联网获取视频列表"
+            return "📭 视频库为空，请先点击模式按钮联网获取视频列表（也可说“视频本地目录”播放本机文件）"
         lines = [f"📚 共 {len(self.videos)} 条皮影视频："]
         for i, v in enumerate(self.videos, 1):
             lines.append(f"{i}. {v.title}")
@@ -652,6 +977,62 @@ class VideoPlayerSystem:
 
         ok = self.player.load_async(self.current_video)
         if not ok:
+            self._set_status("视频系统不可用", seconds=8, is_error=True)
+            self.player.action_queue.put((["idle"], "⚠️ 视频播放器初始化失败"))
+            self.current_video = None
+
+    # ==== 本机视频（download_videos/ 目录，纯本地、不依赖网络）====
+
+    @staticmethod
+    def local_files() -> List[Path]:
+        """列出 download_videos/ 里用户可点播的本机视频文件。
+
+        联网下载的剧目（md5 命名的缓存）不算在内——它们已经在"视频目录"里，
+        断网时按剧目名播放会直接命中缓存，没必要再混进这个列表。
+        """
+        try:
+            VIDEO_DIR.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            print(f"[视频] 创建本机视频目录失败: {e}")
+            return []
+        try:
+            files = [f for f in VIDEO_DIR.iterdir()
+                     if f.is_file() and f.suffix.lower() in LOCAL_VIDEO_EXTS
+                     and not _DOWNLOADED_NAME_RE.match(f.name)]
+        except OSError as e:
+            print(f"[视频] 读取本机视频目录失败: {e}")
+            return []
+        return sorted(files, key=lambda p: p.name)
+
+    def list_local_videos(self) -> str:
+        files = self.local_files()
+        if not files:
+            return (f"📂 本机视频目录为空：{VIDEO_DIR}\n"
+                    f"把 mp4/avi/mov/mkv 等文件放进该文件夹，再说“播放本地视频 <文件名>”")
+        lines = [f"📂 本机视频 {len(files)} 个（{VIDEO_DIR}）："]
+        for i, f in enumerate(files, 1):
+            lines.append(f"{i}. {f.stem}")
+        lines.append("说“播放本地视频 <文件名>”即可播放")
+        return "\n".join(lines)
+
+    def load_local_file(self, name: str):
+        """播放本机视频文件：按文件名模糊匹配。"""
+        files = self.local_files()
+        if not files:
+            self.player.action_queue.put((["idle"],
+                f"📂 本机视频目录为空，请把视频文件放入：{VIDEO_DIR}"))
+            return
+        key = name.strip().lower()
+        results = [f for f in files if key in f.stem.lower()]
+        if not results:
+            self.player.action_queue.put((["idle"],
+                f"未找到本机视频“{name}”，说“视频本地目录”查看已有文件"))
+            return
+        target = results[0]
+        self.current_video = CurrentVideo(title=target.stem, url=str(target), video_id="local")
+        print(f"[视频] 播放本机文件: {target}")
+
+        if not self.player.load_async(self.current_video):
             self._set_status("视频系统不可用", seconds=8, is_error=True)
             self.player.action_queue.put((["idle"], "⚠️ 视频播放器初始化失败"))
             self.current_video = None
@@ -690,6 +1071,14 @@ class VideoPlayerSystem:
         # -------- 下载中：左上角小进度条，其它 UI 照常绘制 --------
         if self.player.is_downloading:
             self._draw_download_corner(screen, w, h, main_font, status_font, ui_colors)
+            return False
+
+        # -------- 抽音轨中：下载已完成，单独提示，避免界面停在"下载 100%"不动（P4）--------
+        if self.player.is_extracting_audio:
+            self._status_text = "🎵 正在准备视频音轨…"
+            self._status_is_error = False
+            self._status_timer = 0     # 不设倒计时，本帧直接画，抽完自然消失
+            self._draw_status_overlay(screen, w, h, main_font, ui_colors)
             return False
 
         # -------- 没有视频 --------
@@ -765,6 +1154,11 @@ class VideoPlayerSystem:
             bg_surf.fill((0, 0, 0, 130))
             screen.blit(bg_surf, bg_rect.topleft)
             screen.blit(title_surf, title_rect)
+
+        # 播放中的瞬时提示（音量调节等，P5）：没有这层，按上下键看不到任何反馈
+        if self._status_timer > 0 and self._status_text:
+            self._status_timer -= 1
+            self._draw_status_overlay(screen, w, h, main_font, ui_colors)
 
         return True
 
@@ -858,9 +1252,9 @@ class VideoPlayerSystem:
         return f"{m:02d}:{s:02d}"
 
     def handle_mouse_click(self, pos, w: int, h: int) -> bool:
-        # 下载中：不吞任何点击，让 main.py 处理输入框、按钮等
-        # 视频控件此时也没有命中区域（_video_rect 为 None），安全
-        if self.player.is_downloading:
+        # 下载中/抽音轨中：不吞任何点击，让 main.py 处理输入框、按钮等
+        # 此时视频控件也没有命中区域（_video_rect 为 None），安全
+        if self.player.is_downloading or self.player.is_extracting_audio:
             return False
         if not self.player.has_video:
             return False
@@ -887,11 +1281,11 @@ class VideoPlayerSystem:
         return False
 
     def handle_key(self, event) -> bool:
-        # 下载中：不吞任何按键（打字继续可用）；只处理 Esc 取消下载
-        if self.player.is_downloading:
+        # 下载/抽音轨中：不吞任何按键（打字继续可用）；只处理 Esc 取消加载
+        if self.player.is_downloading or self.player.is_extracting_audio:
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                 self.stop()
-                self.player.action_queue.put((["idle"], "⏹️ 已取消下载"))
+                self.player.action_queue.put((["idle"], "⏹️ 已取消加载视频"))
                 return True
             return False
         if not self.player.has_video:
@@ -908,11 +1302,20 @@ class VideoPlayerSystem:
         if event.key == pygame.K_RIGHT:
             self.player.seek_seconds(5)
             return True
+        if event.key == pygame.K_UP:
+            v = self.player.set_volume(self.player.volume + 0.1)
+            self._set_status(f"🔊 视频音量 {int(round(v * 100))}%", seconds=1.5)
+            return True
+        if event.key == pygame.K_DOWN:
+            v = self.player.set_volume(self.player.volume - 0.1)
+            self._set_status(f"🔊 视频音量 {int(round(v * 100))}%", seconds=1.5)
+            return True
         return False
 
 
 def create_video_player_system(action_map, action_queue, fps: int = 45,
                                engine=None, llm_client=None) -> VideoPlayerSystem:
+    cleanup_video_dir()   # 启动时回收过期的下载缓存（用户自放的本机视频不碰，P6）
     fetcher = VideoFetcher()
     player = VideoPlayer(action_queue, fps)
     return VideoPlayerSystem(fetcher, player)
