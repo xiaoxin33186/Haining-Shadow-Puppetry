@@ -103,3 +103,13 @@ share_cards/
 
 # 视频系统：手动下载的视频体积大不入库（video_cache.json 作为断网兜底缓存入库）
 download_videos/
+
+# 本地演示材料（PPT、架构图、评审素材，仅本地留存）
+/工程构建与交付.pptx
+/工程构建与交付_PPT大纲.md
+/社会价值.pptx
+/系统架构图.png
+/系统完整架构图.png
+/系统分层架构图.png
+/系统分层架构图_精简版.png
+/AI_Coding评审总结素材.md
