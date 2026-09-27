@@ -9,7 +9,6 @@ from typing import Dict, List, Tuple, Any
 
 from api_client import ChatchatAPIClient
 import chatchat_config as config
-import skill_chatchat_hybrid
 try:
     from openai import OpenAI
     HAS_OPENAI = True

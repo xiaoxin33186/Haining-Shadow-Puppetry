@@ -286,9 +286,7 @@ def get_angle(x1, y1, x2, y2):
     return result + 360.0 if result < 0 else result
 
 def get_image_path(name):
-    png = MATERIAL_ROOT /  f"{name}.png"
-    #jpg = MATERIAL_ROOT / "demo" / f"{name}.jpg"
-    return png if png.exists() else jpg
+    return MATERIAL_ROOT / f"{name}.png"
 
 def load_materials():
     return {name: pygame.image.load(str(get_image_path(name))).convert_alpha() for name in PART_NAMES}

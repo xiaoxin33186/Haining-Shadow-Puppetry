@@ -44,7 +44,7 @@ except Exception as e:
 if HAS_TTS:
     print("[TTS] 本地 Piper 语音合成已就绪")
 else:
-    print("[TTS] Piper 未安装（C:\\piper-tts），语音播报禁用")
+    print("[TTS] Piper 未安装（项目内 piper/ 目录），语音播报禁用")
 
 # [GESTURE] 摄像头抽象手势识别（按需启动），缺依赖时优雅禁用
 try:
@@ -821,7 +821,7 @@ def recognize_and_enqueue(pcm_data: np.ndarray):
         recognized_text_timer = RECOGNIZED_TEXT_DURATION
 
 def toggle_recording():
-    global is_recording, rec_stream, audio_buffers
+    global is_recording, rec_stream, audio_buffers, last_recognized_text, recognized_text_timer
     if not vosk_model:
         print("[警告] Vosk 模型未加载，无法启动录音。")
         return

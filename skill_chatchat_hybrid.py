@@ -163,9 +163,9 @@ class HybridAgentSystem:
         # ═══════ 第二级：Chatchat 向量库回答，生成动作（gemma3:4b） ═══════
         try:
             answer = await self.chatchat_system.process_input(text)
-            actions = await self._generate_action(text, answer)
             if not self._is_no_info_answer(answer):
                 logger.info(f"第二级[Chatchat] 有答案: {answer}")
+                actions = await self._generate_action(text, answer)
                 return HybridResponse(actions, answer, "chatchat", 0.0)
             logger.info("[Chatchat] 无有效答案，进入第三级模型直答")
         except Exception as e:
