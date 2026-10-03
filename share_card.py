@@ -36,12 +36,29 @@ try:
 except Exception:  # noqa: BLE001
     config = None
 
+try:
+    import httpx
+    HAS_HTTPX = True
+except ImportError:
+    HAS_HTTPX = False
+
+try:
+    import qrcode
+    HAS_QRCODE = True
+except ImportError:
+    HAS_QRCODE = False
+
 
 BASE_DIR = Path(__file__).resolve().parent
 FONT_PATH = str(BASE_DIR / "font.ttf")
 TEMPLATES_DIR = BASE_DIR / "card_templates"
 CARDS_DIR = BASE_DIR / "share_cards"
 BRAND = "海宁皮影戏 · 海宁小状元"
+
+# [分享] 云上传配置（demo：HTTP + IP + 端口）
+CARD_UPLOAD_URL = "http://121.40.76.121:8085/upload"
+CARD_UPLOAD_TOKEN = "haining-demo-token"
+CARD_UPLOAD_TIMEOUT = 5
 
 # 成品卡片保留上限（超出按修改时间删除最旧的，避免无限堆积）
 MAX_KEEP_CARDS = 30
@@ -92,6 +109,7 @@ class ShareCardSystem:
         self.pending_result: Optional[ShareResult] = None
         self.current_card = None
         self.current_card_path: Optional[Path] = None
+        self.card_url: Optional[str] = None
         self._lock = threading.Lock()
 
     # ==================== 触发与主题 ====================
@@ -282,15 +300,85 @@ class ShareCardSystem:
                 self.current_card_path = self._save_card(surf, result)
                 self.current_card = surf
                 print(f"[分享] 知识卡片已保存: {self.current_card_path}")
+                threading.Thread(
+                    target=self._upload_async,
+                    args=(surf, self.current_card_path),
+                    daemon=True,
+                ).start()
             except Exception as e:  # noqa: BLE001
                 print(f"[分享] 卡片渲染失败: {e}")
         return self.current_card
+
+    def _upload_async(self, surf, path: Path) -> None:
+        url = self._upload_file(path)
+        if not url or not HAS_QRCODE:
+            return
+        try:
+            qr = self._make_qr_surface(url)
+            if qr is None:
+                return
+            new_surf = surf.copy()
+            self._stamp_qr(new_surf, qr)
+            with self._lock:
+                if self.current_card is surf:
+                    self.current_card = new_surf
+                    self.card_url = url
+            print(f"[分享] 二维码已合成: {url}")
+        except Exception as e:  # noqa: BLE001
+            print(f"[分享] 二维码合成失败: {e}")
+
+    def _upload_file(self, path: Path) -> Optional[str]:
+        if not HAS_HTTPX:
+            print("[分享] 未安装 httpx，跳过上传")
+            return None
+        try:
+            data = Path(path).read_bytes()
+            resp = httpx.post(
+                CARD_UPLOAD_URL,
+                params={"name": Path(path).name},
+                headers={"X-Upload-Token": CARD_UPLOAD_TOKEN},
+                content=data,
+                timeout=CARD_UPLOAD_TIMEOUT,
+            )
+            resp.raise_for_status()
+            return resp.json().get("url")
+        except Exception as e:  # noqa: BLE001
+            print(f"[分享] 上传失败，跳过二维码: {e}")
+            return None
+
+    def _make_qr_surface(self, url: str, pixels: int = 6):
+        qr = qrcode.QRCode(border=2)
+        qr.add_data(url)
+        qr.make(fit=True)
+        mat = qr.get_matrix()
+        n = len(mat)
+        surf = pygame.Surface((n * pixels, n * pixels))
+        surf.fill((255, 255, 255))
+        for y, row in enumerate(mat):
+            for x, cell in enumerate(row):
+                if cell:
+                    pygame.draw.rect(surf, (0, 0, 0), (x * pixels, y * pixels, pixels, pixels))
+        return surf
+
+    def _stamp_qr(self, card_surf, qr_surf, margin: int = 24) -> None:
+        W, H = card_surf.get_size()
+        target = max(120, int(W * 0.22))
+        qr_surf = pygame.transform.smoothscale(qr_surf, (target, target))
+        pad = 10
+        x = W - target - margin
+        y = H - target - margin
+        pygame.draw.rect(card_surf, (255, 255, 255),
+                         (x - pad, y - pad, target + 2 * pad, target + 2 * pad))
+        card_surf.blit(qr_surf, (x, y))
+        font = self._get_font(max(14, int(W * 0.020)))
+        font.render_to(card_surf, (x - pad, y - pad - int(W * 0.028)), "扫码保存卡片", (60, 40, 30))
 
     def is_card_visible(self) -> bool:
         return self.current_card is not None
 
     def close_card(self) -> None:
         self.current_card = None
+        self.card_url = None
 
     def _load_template_paths(self) -> List[Path]:
         """收集可用底图：card_templates/ 内的图片 + templates.json 里引用的外部图片。
