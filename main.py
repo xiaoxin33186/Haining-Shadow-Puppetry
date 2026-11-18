@@ -1653,7 +1653,7 @@ def pygame_loop():
     video_was_active = False  # [视频集成] 用于检测视频开始/结束并切换布局
     script_was_active = False  # [剧本集成] 用于检测剧本开始/结束并切换布局
     # [GESTURE] 摄像头预览位置与拖动状态
-    preview_pos = [10, 10]
+    preview_pos = [10, 60]
     preview_rect = None
     preview_dragging = False
     preview_drag_offset = (0, 0)
@@ -2198,6 +2198,61 @@ def pygame_loop():
             else:
                 card_disp = None
 
+        # ===== [帮助] 左上角小"?"标志：平时静默，鼠标悬停时展开操作说明 =====
+        help_rect = pygame.Rect(15, 15, 34, 34)
+        _help_lines = [
+            "文字输入：点击输入框或按 Tab 激活，Enter 提交",
+            "语音输入：按 Space 开始 / 停止录音",
+            "视频指令：视频目录 · 播放视频 <名称> · 停止视频",
+            "剧本指令：剧本目录 · 播放剧本 <名称> · 生成剧本 <主题>",
+            "分享卡片：说“生成分享卡片即可制作",
+            "底部按钮：手势交互 · 剧本 · 分享 · 人偶切换",
+        ]
+        _mouse_logical = _to_logical(pygame.mouse.get_pos())
+        _hover_help = help_rect.collidepoint(_mouse_logical)
+
+        # 画图标（半透明圆 + 金边 + "?"）
+        _help_icon = pygame.Surface((help_rect.w, help_rect.h), pygame.SRCALPHA)
+        pygame.draw.circle(_help_icon, (80, 60, 40, 180),
+                           (help_rect.w // 2, help_rect.h // 2), help_rect.w // 2 - 2)
+        pygame.draw.circle(_help_icon, UI_COLORS["gold"],
+                           (help_rect.w // 2, help_rect.h // 2), help_rect.w // 2 - 2, 2)
+        screen.blit(_help_icon, help_rect.topleft)
+        _q_surf, _q_rect = status_font.render("?", (255, 255, 255))
+        _q_rect.center = help_rect.center
+        screen.blit(_q_surf, _q_rect)
+
+        # 悬停时弹出说明面板
+        if _hover_help:
+            _pad = 14
+            _line_h = status_font.get_sized_height() + 6
+            _title_h = status_font.get_sized_height() + 10
+            _line_widths = [status_font.get_rect(line).width for line in _help_lines]
+            _panel_w = max(_line_widths) + _pad * 2
+            _panel_h = _pad * 2 + _title_h + len(_help_lines) * _line_h
+            _panel_x = help_rect.right + 8
+            _panel_y = help_rect.top
+            # 防越界
+            if _panel_x + _panel_w > w - 10:
+                _panel_x = max(10, w - _panel_w - 10)
+            if _panel_y + _panel_h > h - 10:
+                _panel_y = max(10, h - _panel_h - 10)
+            _panel_rect = pygame.Rect(_panel_x, _panel_y, _panel_w, _panel_h)
+            _panel_surf = pygame.Surface((_panel_w, _panel_h), pygame.SRCALPHA)
+            pygame.draw.rect(_panel_surf, (40, 25, 15, 240),
+                             (0, 0, _panel_w, _panel_h), border_radius=10)
+            pygame.draw.rect(_panel_surf, UI_COLORS["gold"],
+                             (0, 0, _panel_w, _panel_h), 2, border_radius=10)
+            screen.blit(_panel_surf, _panel_rect.topleft)
+            status_font.render_to(screen, (_panel_x + _pad, _panel_y + _pad),
+                                  "操作提示", UI_COLORS["gold"])
+            pygame.draw.line(screen, UI_COLORS["gold"],
+                             (_panel_x + _pad, _panel_y + _pad + _title_h - 6),
+                             (_panel_x + _panel_w - _pad, _panel_y + _pad + _title_h - 6), 1)
+            _cur_y = _panel_y + _pad + _title_h
+            for _line in _help_lines:
+                status_font.render_to(screen, (_panel_x + _pad, _cur_y), _line, (240, 230, 210))
+                _cur_y += _line_h
         _present()
         pygame.display.flip()
 
