@@ -1,0 +1,151 @@
+{
+  "title": "离别",
+  "theme": "离别",
+  "total_duration": 48.5,
+  "created_at": "2026-11-13 11:38:16",
+  "source_type": "generated",
+  "scenes": [
+    {
+      "scene_id": 1,
+      "title": "分别",
+      "description": "老翁与幼女分别",
+      "lines": [
+        {
+          "speaker": "老翁",
+          "text": "女儿，慢些走。",
+          "action": "greet",
+          "duration": 2.0
+        },
+        {
+          "speaker": "女儿",
+          "text": "爹爹，再见了。",
+          "action": "greet",
+          "duration": 2.5
+        },
+        {
+          "speaker": "老翁",
+          "text": "莫要太着急，快些吧。",
+          "action": "forward",
+          "duration": 2.0
+        },
+        {
+          "speaker": "女儿",
+          "text": "爹爹，我走了。",
+          "action": "back",
+          "duration": 2.5
+        },
+        {
+          "speaker": "老翁",
+          "text": "好好地看好自己。",
+          "action": "greet",
+          "duration": 2.0
+        }
+      ]
+    },
+    {
+      "scene_id": 2,
+      "title": "望断",
+      "description": "老翁独自回望",
+      "lines": [
+        {
+          "speaker": "老翁",
+          "text": "女儿，女儿…",
+          "action": "normal",
+          "duration": 3.0
+        },
+        {
+          "speaker": "老翁",
+          "text": "何时才能再见你。",
+          "action": "forward",
+          "duration": 2.5
+        },
+        {
+          "speaker": "老翁",
+          "text": "天涯海角，何时能相聚。",
+          "action": "retreat",
+          "duration": 2.0
+        },
+        {
+          "speaker": "老翁",
+          "text": "愿你身安好，快些归来。",
+          "action": "normal",
+          "duration": 2.5
+        },
+        {
+          "speaker": "老翁",
+          "text": "唉…",
+          "action": "idle",
+          "duration": 3.0
+        }
+      ]
+    },
+    {
+      "scene_id": 3,
+      "title": "思念",
+      "description": "老翁思念女儿",
+      "lines": [
+        {
+          "speaker": "老翁",
+          "text": "女儿，女儿…",
+          "action": "scratch",
+          "duration": 3.0
+        },
+        {
+          "speaker": "老翁",
+          "text": "何时才能再见你。",
+          "action": "normal",
+          "duration": 2.5
+        },
+        {
+          "speaker": "老翁",
+          "text": "愿你身安好，快些归来。",
+          "action": "greet",
+          "duration": 2.5
+        },
+        {
+          "speaker": "老翁",
+          "text": "女儿，女儿…",
+          "action": "scratch",
+          "duration": 2.5
+        },
+        {
+          "speaker": "老翁",
+          "text": "唉…",
+          "action": "idle",
+          "duration": 3.0
+        }
+      ]
+    },
+    {
+      "scene_id": 4,
+      "title": "离别",
+      "description": "老翁静默",
+      "lines": [
+        {
+          "speaker": "老翁",
+          "text": "女儿…",
+          "action": "normal",
+          "duration": 3.0
+        },
+        {
+          "speaker": "老翁",
+          "text": "女儿…",
+          "action": "greet",
+          "duration": 2.5
+        },
+        {
+          "speaker": "老翁",
+          "text": "唉…",
+          "action": "idle",
+          "duration": 3.0
+        },
+        {
+          "speaker": "老翁",
+          "text": "空留我一人。",
+          "action": "greet",
+          "duration": 2.5
+        }
+      ]
+    }
+  ]
+}

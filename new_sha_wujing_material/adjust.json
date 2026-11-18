@@ -1,0 +1,143 @@
+{
+  "parts": {
+    "body": [
+      104,
+      4,
+      70.88607594936693,
+      -5.063291139240488
+    ],
+    "head": [
+      94,
+      3,
+      30.379746835442788,
+      5.0632911392405076
+    ],
+    "right_hip": [
+      37,
+      12,
+      16.455696202531623,
+      -13.924050632911388
+    ],
+    "right_knee": [
+      50,
+      7,
+      20.253164556962027,
+      2.886579864025407e-15
+    ],
+    "left_hip": [
+      54,
+      10,
+      27.848101265822677,
+      6.3291139240506515
+    ],
+    "left_knee": [
+      51,
+      7,
+      32.91139240506331,
+      1.2658227848101253
+    ],
+    "right_elbow": [
+      36,
+      31,
+      18.987341772151943,
+      17.721518987341767
+    ],
+    "right_wrist": [
+      91,
+      23,
+      60.759493670886066,
+      35.44303797468356
+    ],
+    "left_elbow": [
+      55,
+      30,
+      -17.72151898734166,
+      26.58227848101272
+    ],
+    "left_wrist": [
+      61,
+      22,
+      22.78481012658237,
+      3.79746835443039
+    ]
+  },
+  "rot": {
+    "body": 0.0,
+    "head": 2.5,
+    "right_hip": 2.5,
+    "right_knee": 2.5,
+    "left_hip": -7.5,
+    "left_knee": 0.0,
+    "right_elbow": 9.0,
+    "right_wrist": 24.5,
+    "left_elbow": -41.5,
+    "left_wrist": -36.5
+  },
+  "mirror": {
+    "body": false,
+    "head": false,
+    "right_hip": false,
+    "right_knee": true,
+    "left_hip": false,
+    "left_knee": false,
+    "right_elbow": false,
+    "right_wrist": true,
+    "left_elbow": false,
+    "left_wrist": false
+  },
+  "draw": {
+    "body": 3,
+    "head": 3,
+    "right_hip": 1,
+    "right_knee": 3,
+    "left_hip": 1,
+    "left_knee": 3,
+    "right_elbow": 4,
+    "right_wrist": 4,
+    "left_elbow": 3,
+    "left_wrist": 3
+  },
+  "pivot": {
+    "body": [
+      104,
+      4
+    ],
+    "head": [
+      94,
+      3
+    ],
+    "right_hip": [
+      37,
+      12
+    ],
+    "right_knee": [
+      50,
+      7
+    ],
+    "left_hip": [
+      54,
+      10
+    ],
+    "left_knee": [
+      51,
+      7
+    ],
+    "right_elbow": [
+      36,
+      31
+    ],
+    "right_wrist": [
+      91,
+      23
+    ],
+    "left_elbow": [
+      55,
+      30
+    ],
+    "left_wrist": [
+      61,
+      22
+    ]
+  },
+  "scene_mirror": false
+}

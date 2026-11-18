@@ -1,0 +1,151 @@
+{
+  "title": "红孩儿与二郎神",
+  "theme": "神话传说",
+  "total_duration": 54.0,
+  "created_at": "2026-09-24 21:46:32",
+  "source_type": "generated",
+  "scenes": [
+    {
+      "scene_id": 1,
+      "title": "初遇",
+      "description": "红孩儿与二郎神相遇，红孩儿展示功夫。",
+      "lines": [
+        {
+          "speaker": "红孩儿",
+          "text": "呔！壮汉，莫挡路！",
+          "action": "forward",
+          "duration": 2.8
+        },
+        {
+          "speaker": "红孩儿",
+          "text": "看俺这小猴儿，耍耍拳脚!",
+          "action": "jump",
+          "duration": 3.1
+        },
+        {
+          "speaker": "二郎神",
+          "text": "好生有趣，莫急，且看我一招。",
+          "action": "normal",
+          "duration": 2.5
+        },
+        {
+          "speaker": "红孩儿",
+          "text": "好，就来！",
+          "action": "punch",
+          "duration": 3.2
+        },
+        {
+          "speaker": "二郎神",
+          "text": "哈哈，不赖！",
+          "action": "block",
+          "duration": 2.7
+        }
+      ]
+    },
+    {
+      "scene_id": 2,
+      "title": "比试",
+      "description": "红孩儿与二郎神比试戏法。",
+      "lines": [
+        {
+          "speaker": "红孩儿",
+          "text": "俺老猴儿的火眼金睛，比你强！",
+          "action": "scratch",
+          "duration": 3.0
+        },
+        {
+          "speaker": "二郎神",
+          "text": "别得意，看我变化乾坤!",
+          "action": "normal",
+          "duration": 2.9
+        },
+        {
+          "speaker": "红孩儿",
+          "text": "哈哈，变化也快，不过俺的箭法更胜一筹!",
+          "action": "forward",
+          "duration": 2.7
+        },
+        {
+          "speaker": "二郎神",
+          "text": "好，就见识俺的神力!",
+          "action": "jump",
+          "duration": 3.1
+        },
+        {
+          "speaker": "红孩儿",
+          "text": "嗖!",
+          "action": "forward",
+          "duration": 2.5
+        }
+      ]
+    },
+    {
+      "scene_id": 3,
+      "title": "争斗",
+      "description": "红孩儿与二郎神展开激烈争斗。",
+      "lines": [
+        {
+          "speaker": "红孩儿",
+          "text": "哼，你休想得逞!",
+          "action": "forward",
+          "duration": 2.8
+        },
+        {
+          "speaker": "二郎神",
+          "text": "你敢打俺！",
+          "action": "punch",
+          "duration": 3.0
+        },
+        {
+          "speaker": "红孩儿",
+          "text": "嗖！嗖！",
+          "action": "forward",
+          "duration": 2.6
+        },
+        {
+          "speaker": "二郎神",
+          "text": "哈哈，还敢来!",
+          "action": "block",
+          "duration": 2.9
+        },
+        {
+          "speaker": "红孩儿",
+          "text": "后撤!",
+          "action": "retreat",
+          "duration": 2.7
+        }
+      ]
+    },
+    {
+      "scene_id": 4,
+      "title": "和解",
+      "description": "红孩儿与二郎神和解。",
+      "lines": [
+        {
+          "speaker": "红孩儿",
+          "text": "罢了罢了，你不必责怪俺!",
+          "action": "normal",
+          "duration": 3.0
+        },
+        {
+          "speaker": "二郎神",
+          "text": "也罢，也罢，你是个好猴儿!",
+          "action": "dun",
+          "duration": 2.8
+        },
+        {
+          "speaker": "红孩儿",
+          "text": "哈哈，俺老猴儿与你结为兄弟!",
+          "action": "normal",
+          "duration": 3.1
+        },
+        {
+          "speaker": "二郎神",
+          "text": "好，好！",
+          "action": "dun",
+          "duration": 2.6
+        }
+      ]
+    }
+  ]
+}

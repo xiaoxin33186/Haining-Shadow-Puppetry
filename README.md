@@ -444,11 +444,12 @@ python main.py
 xinwukong_material/          # 新悟空
   body.png  head.png  right_hip.png ...   # 10 个部件
   adjust.json                            # 该角色专属调参
-wukong_shadow_play_material/ # 悟空
+wukong_shadow_play_material/ # 旧悟空（已停用，素材保留）
 bull_demon_king_material/    # 牛魔王
-sha_wujing_material/         # 沙僧
+sha_wujing_material/         # 旧沙僧（已停用，素材保留）
+new_sha_wujing_material/     # 新沙僧（当前使用）
 zhu_bajie_material/          # 猪八戒
-shadow_play_material/        # 海宁通用（备用，当前无 adjust.json）
+shadow_play_material/        # 海宁通用（已停用，备用）
 ```
 
 `adjust.json` 按角色独立保存 **偏移 / 旋转 / 镜像 / 图层 / 枢轴 / 整体朝向**，角色之间互不干扰；缺失时使用引擎默认参数。
@@ -463,7 +464,8 @@ shadow_play_material/        # 海宁通用（备用，当前无 adjust.json）
 
 - 主界面输入模式按钮上方有 **「左偶：XXX」「右偶：XXX」** 两个按钮，点击在全部角色中循环切换；**Shift+点击反向**。
 - 左右偶角色持久化在根目录 `puppet_roles.json`（`{"left": "...", "right": "..."}`），启动时读取；常态下右偶角色按钮只更新"对手角色"，开启手势交互后才显示第二只偶。
-- 默认：左偶 `xinwukong_material`、右偶 `bull_demon_king_material`。
+- 仓库内 `puppet_roles.json` 当前为：左偶 `new_sha_wujing_material`（新沙僧）、右偶 `bull_demon_king_material`（牛魔王）；文件缺失时回退到代码默认 `xinwukong_material` / `bull_demon_king_material`。
+- 已停用角色（`wukong_shadow_play_material`、`shadow_play_material`、`sha_wujing_material`）素材目录保留在仓库里，但不进入循环列表。
 
 ### 素材调整工具 `adjust_puppet.py`
 
@@ -499,13 +501,14 @@ python prepare_character.py <原始素材目录> <输出目录名>
 ```
 
 - 输出目录名一律用**英文**（如 `bull_demon_king_material`、`sha_wujing_material`），部件 PNG 也是标准英文名；
-- 兼容两类命名：按"上/下"分段的（`右胳膊 右手 左腿上 左腿下 …`）与左右部件各自独立的（`右/左胳膊 右/左手 右/左腿 右/左脚 …`）；
+- 兼容三类命名：按"上/下"分段的（`右胳膊 右手 左腿上 左腿下 …`）、左右部件各自独立的（`右/左胳膊 右/左手 右/左腿 右/左脚 …`）、以及只画一侧不带左右的（`胳膊 手臂 大腿 脚 …`，同“新沙僧”）；
 - 缺一侧肢体时自动用对侧**镜像补齐**；
 - 自动按身体高度统一缩放并生成默认 `adjust.json`；
+- 可在原始目录放可选的 `pivots.json`，用源图像素坐标指定关节枢轴和初始旋转（模板见仓库根目录 `pivots.example.json`，复制为 `pivots.json` 放进原始素材目录即可）；
 - 输出目录含 10 张标准图后，会在调整工具 `Tab` 列表中自动出现。
 
-> 注：新悟空的初次锚点重切使用 `prepare_material.py`（含每部件关节锚点可改，重跑即可再生）。
-> 原始大图目录（`新孙悟空/`、`怪物/`、`沙僧/`、`猪八戒/`）不入仓库，需要重生成素材时请自行保留原图后运行上述脚本。
+> 注：新悟空的初次锚点重切使用 `prepare_material.py`（含每部件关节锚点可改，重跑即可再生；可用 `python prepare_material.py <原始素材目录>` 指定源目录）。
+> 原始大图目录（`新孙悟空/`、`怪物/`、`沙僧/`、`猪八戒/`、`新沙僧/`）不入仓库，需要重生成素材时请自行保留原图后运行上述脚本。
 
 ### 历史兼容
 

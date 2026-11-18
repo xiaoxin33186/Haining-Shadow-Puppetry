@@ -1,9 +1,18 @@
 # -*- coding: utf-8 -*-
-import os, math, json
+import os, sys, math, json
 import numpy as np
 from PIL import Image
 
 SRC = "新孙悟空"
+# 也可用命令行指定源目录: python prepare_material.py [原始素材目录]
+if len(sys.argv) > 1:
+    SRC = sys.argv[1]
+if not os.path.isdir(SRC):
+    sys.exit(
+        f"找不到原始素材目录: {SRC}\n"
+        "请把 `新孙悟空/` 放回项目根目录，或用命令行指定路径:\n"
+        "  python prepare_material.py <原始素材目录>"
+    )
 DST = "xinwukong_material"
 CX = 1600.0
 RESAMPLE = 0.28

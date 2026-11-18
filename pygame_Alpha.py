@@ -50,16 +50,27 @@ SCENE_MIRROR = False
 PROJECT = Path(__file__).resolve().parent
 CHAR_DISPLAY = {
     "xinwukong_material": "悟空",
-    "wukong_shadow_play_material": "旧悟空",
-    "shadow_play_material": "海宁通用",
+    # "wukong_shadow_play_material": "旧悟空",   # [停用] 不再显示
+    # "shadow_play_material": "海宁通用",         # [停用] 不再显示
     "bull_demon_king_material": "牛魔王",
-    "sha_wujing_material": "沙僧",
+    # "sha_wujing_material": "沙僧",               # [停用] 已由新沙僧取代
+    "new_sha_wujing_material": "新沙僧",
     "zhu_bajie_material": "猪八戒",
 }
 
+# [停用角色] 素材目录保留，但不进入可选角色池（按钮循环里不会再切到）
+DISABLED_CHARACTERS = {
+    "wukong_shadow_play_material",  # 旧悟空
+    "shadow_play_material",         # 海宁通用
+    "sha_wujing_material",          # 旧沙僧（已由新沙僧取代）
+}
+
 def _candidate_dirs():
-    known = ["xinwukong_material", "wukong_shadow_play_material", "shadow_play_material",
-             "bull_demon_king_material", "sha_wujing_material", "zhu_bajie_material"]
+    known = ["xinwukong_material",
+             # "wukong_shadow_play_material",  # [停用] 旧悟空
+             # "shadow_play_material",         # [停用] 海宁通用
+             "bull_demon_king_material",
+             "new_sha_wujing_material", "zhu_bajie_material"]
     found = []
     try:
         for d in sorted(os.listdir(PROJECT)):
@@ -68,7 +79,8 @@ def _candidate_dirs():
                 found.append(d)
     except Exception:
         pass
-    return [d for d in known if d in found] + [d for d in found if d not in known]
+    return [d for d in known if d in found] + [d for d in found
+                                               if d not in known and d not in DISABLED_CHARACTERS]
 
 CHARACTERS = _candidate_dirs()
 

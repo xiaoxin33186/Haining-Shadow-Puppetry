@@ -1,0 +1,23 @@
+{
+  "_说明": "把本文件复制到原始素材目录并改名为 pivots.json，prepare_character.py 会自动读取。pivots = 关节枢轴（源图像素坐标 [x, y]），rot = 初始旋转角（度）。未列出的部件用引擎默认（图片宽度一半、顶部中点）；只写右侧即可，左侧部件生成时自动镜像。",
+  "pivots": {
+    "body": [600, 0],
+    "head": [560, 10],
+    "right_hip": [295, 42],
+    "right_knee": [300, 45],
+    "right_elbow": [828, 128],
+    "right_wrist": [348, 1010]
+  },
+  "rot": {
+    "body": 0.0,
+    "head": -8.1,
+    "right_hip": -0.9,
+    "right_knee": 0.0,
+    "right_elbow": -72.5,
+    "right_wrist": -174.3,
+    "left_hip": 0.9,
+    "left_knee": 0.0,
+    "left_elbow": 72.5,
+    "left_wrist": 174.3
+  }
+}

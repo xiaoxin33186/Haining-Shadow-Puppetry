@@ -1,0 +1,157 @@
+{
+  "title": "斩妖除魔",
+  "theme": "打斗",
+  "total_duration": 55.7,
+  "created_at": "2026-11-13 11:52:06",
+  "source_type": "generated",
+  "scenes": [
+    {
+      "scene_id": 1,
+      "title": "初遇妖魔",
+      "description": "孙悟空初遇妖魔，准备战斗。",
+      "lines": [
+        {
+          "speaker": "孙悟空",
+          "text": "呔！妖魔，竟敢扰我道友！",
+          "action": "punch",
+          "duration": 2.8
+        },
+        {
+          "speaker": "妖魔",
+          "text": "哼！不堪一击的凡人！",
+          "action": "normal",
+          "duration": 2.2
+        },
+        {
+          "speaker": "孙悟空",
+          "text": "好！便叫你见识一下我的本事！",
+          "action": "jump",
+          "duration": 3.1
+        },
+        {
+          "speaker": "妖魔",
+          "text": "区区一人，何足挂齿？",
+          "action": "retreat",
+          "duration": 2.5
+        },
+        {
+          "speaker": "孙悟空",
+          "text": "敢不敬！",
+          "action": "greet",
+          "duration": 2.7
+        }
+      ]
+    },
+    {
+      "scene_id": 2,
+      "title": "正面对抗",
+      "description": "孙悟空与妖魔展开激战。",
+      "lines": [
+        {
+          "speaker": "孙悟空",
+          "text": "金箍棒！",
+          "action": "punch",
+          "duration": 2.9
+        },
+        {
+          "speaker": "妖魔",
+          "text": "格挡！",
+          "action": "block",
+          "duration": 3.2
+        },
+        {
+          "speaker": "孙悟空",
+          "text": "还未躲开！",
+          "action": "forward",
+          "duration": 2.6
+        },
+        {
+          "speaker": "妖魔",
+          "text": "狂攻！",
+          "action": "lunge",
+          "duration": 3.0
+        },
+        {
+          "speaker": "孙悟空",
+          "text": "护住身下！",
+          "action": "greet",
+          "duration": 2.8
+        }
+      ]
+    },
+    {
+      "scene_id": 3,
+      "title": "反击",
+      "description": "孙悟空巧妙反击，击败妖魔。",
+      "lines": [
+        {
+          "speaker": "孙悟空",
+          "text": "正中下盘！",
+          "action": "kick",
+          "duration": 3.1
+        },
+        {
+          "speaker": "妖魔",
+          "text": "啊！",
+          "action": "hit",
+          "duration": 2.7
+        },
+        {
+          "speaker": "孙悟空",
+          "text": "看你还敢不服！",
+          "action": "jump",
+          "duration": 2.9
+        },
+        {
+          "speaker": "妖魔",
+          "text": "逃！",
+          "action": "retreat",
+          "duration": 2.6
+        },
+        {
+          "speaker": "孙悟空",
+          "text": "追！",
+          "action": "forward",
+          "duration": 3.0
+        }
+      ]
+    },
+    {
+      "scene_id": 4,
+      "title": "胜负已定",
+      "description": "孙悟空战胜妖魔，结束战斗。",
+      "lines": [
+        {
+          "speaker": "孙悟空",
+          "text": "妖魔已死！",
+          "action": "normal",
+          "duration": 2.8
+        },
+        {
+          "speaker": "孙悟空",
+          "text": "哈哈！",
+          "action": "jump",
+          "duration": 2.5
+        },
+        {
+          "speaker": "孙悟空",
+          "text": "正果！",
+          "action": "greet",
+          "duration": 2.7
+        },
+        {
+          "speaker": "孙悟空",
+          "text": "再也不敢扰我道友！",
+          "action": "jump",
+          "duration": 3.1
+        },
+        {
+          "speaker": "孙悟空",
+          "text": "胜！",
+          "action": "normal",
+          "duration": 2.5
+        }
+      ]
+    }
+  ]
+}
