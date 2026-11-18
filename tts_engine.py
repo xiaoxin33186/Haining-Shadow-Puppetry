@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+﻿﻿# -*- coding: utf-8 -*-
 """海宁皮影戏 · 本地 Piper TTS 引擎
 piper 主程序与语音模型位于 PIPER_EXE / VOICE_MODEL 所指路径。
 注意：piper 必须放在【无中文】的路径下，否则 espeak-ng 会报 "Illegal byte sequence" 错误。
@@ -34,8 +34,11 @@ def _clean(text: str) -> str:
     return text
 
 
-def speak(text: str):
-    """合成并播放一段中文文本（阻塞式，请勿在主线程直接调用）"""
+def speak(text: str, seq=None):
+    """合成并播放一段中文文本（阻塞式，请勿在主线程直接调用）
+
+    seq 为调用时的停止序号：若播放期间用户点了"停止"（序号变化），则立即中断。
+    """
     if not is_available():
         print("[TTS] Piper 不可用，跳过语音")
         return
@@ -57,15 +60,22 @@ def speak(text: str):
         if proc.returncode != 0 or not os.path.exists(wav):
             print(f"[TTS] Piper 合成失败: {proc.stderr.decode('utf-8', errors='replace')[:200]}")
             return
+        # 合成期间可能已经被停止，直接丢弃
+        if seq is not None and seq != _stop_seq:
+            print("[TTS] 已停止，跳过本次播报")
+            return
 
         # 用 pygame 播放
         import pygame
+        import time
         if not pygame.mixer.get_init():
             pygame.mixer.init()
         pygame.mixer.music.load(wav)
         pygame.mixer.music.play()
         while pygame.mixer.music.get_busy():
-            import time
+            if seq is not None and seq != _stop_seq:
+                pygame.mixer.music.stop()
+                break
             time.sleep(0.1)
         pygame.mixer.music.unload()
     except Exception as e:
@@ -86,6 +96,7 @@ def speak(text: str):
 _cond = threading.Condition()
 _pending = None
 _worker = None
+_stop_seq = 0          # 停止序号：递增后正在合成/播放的语音会自行退出
 
 
 def _worker_loop():
@@ -97,8 +108,9 @@ def _worker_loop():
                 _cond.wait()
             text = _pending
             _pending = None
+            seq = _stop_seq
         try:
-            speak(text)
+            speak(text, seq)
         except Exception as e:  # noqa: BLE001
             print(f"[TTS] 播报异常（已忽略，线程继续）: {e}")
 
@@ -117,6 +129,20 @@ def speak_async(text: str):
             _worker = threading.Thread(target=_worker_loop, daemon=True)
             _worker.start()
         _cond.notify()
+
+
+def stop():
+    """立即停止当前播报并丢弃未播内容（停止按钮 / 功能互斥时调用）。"""
+    global _pending, _stop_seq
+    with _cond:
+        _pending = None
+        _stop_seq += 1
+    try:
+        import pygame
+        if pygame.mixer.get_init():
+            pygame.mixer.music.stop()
+    except Exception as e:  # noqa: BLE001
+        print(f"[TTS] 停止失败: {e}")
 
 
 if __name__ == "__main__":

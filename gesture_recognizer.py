@@ -70,11 +70,13 @@ def _ensure_model(model_path=_MODEL_PATH, url=_MODEL_URL):
 
 
 def is_available():
-    """是否具备手势识别条件（依赖齐全且模型文件已就位）。
+    """是否具备手势识别条件（只要求依赖齐全，不要求模型文件已下载）。
 
-    不触发联网下载，供主程序在导入时安全判断，避免 HAS_GESTURE 恒为 True。
+    刻意不检查模型文件：首次启用时 start() 会通过 _ensure_model() 自动下载。
+    若把模型存在性算进来，新机器上 HAS_GESTURE 会恒为 False，按钮永远打不开，
+    自动下载那段代码也永远走不到。
     """
-    return cv2 is not None and _HAS_TASKS and os.path.exists(_MODEL_PATH)
+    return cv2 is not None and _HAS_TASKS
 
 
 # ===== MediaPipe 任务实例复用 =====
@@ -85,6 +87,19 @@ def is_available():
 _landmarker = None
 _landmarker_lock = threading.Lock()
 _ts_ms = 0
+
+
+def _next_timestamp():
+    """返回按真实时间推进、且严格单调递增的毫秒时间戳。
+
+    VIDEO 模式内部用时间戳做跟踪平滑，必须与真实帧间隔一致：
+    固定 +33ms 在低帧率摄像头（弱光自动降帧）下会让运动模型失真、更容易丢手。
+    实例是全进程复用的，跨会话也必须单调递增，故用 max 兜底。
+    """
+    global _ts_ms
+    now_ms = int(time.monotonic() * 1000)
+    _ts_ms = max(_ts_ms + 1, now_ms)
+    return _ts_ms
 
 
 def _get_landmarker():
@@ -113,7 +128,8 @@ class GestureRecognizer:
     GESTURE_NAMES = ("fist", "pinch", "kick", "push")
 
     def __init__(self, callback, camera_index=0, cooldown=2.0,
-                 pinch_ratio=0.30, wave_window=1.5, confirm_frames=8,
+                 pinch_ratio=0.30, wave_window=1.5,
+                 confirm_hold=0.20, confirm_gap=0.30, confirm_min_hits=2,
                  show_preview=True, move_callback=None):
         self.callback = callback              # callback(hand, gesture_name)，在主流程线程调用
         # 连续手部位置回调：move_callback(hand, x, y)；手不在画面时 x/y 为 None
@@ -122,16 +138,19 @@ class GestureRecognizer:
         self.cooldown = cooldown              # 同一手势两次触发的最小间隔（秒）
         self.pinch_ratio = pinch_ratio        # 拇指-食指间距 / 手尺寸 < 该值视为捏合
         self.wave_window = wave_window        # 挥手方向变化的观察窗口（秒）
-        self.confirm_frames = confirm_frames  # 手势需连续稳定出现 N 帧才触发（防误触发/降速）
+        self.confirm_hold = confirm_hold      # 手势需持续这么久才触发（按时间，与帧率无关）
+        self.confirm_gap = confirm_gap        # 手势/手短暂消失的容忍时长，超时才重置
+        self.confirm_min_hits = confirm_min_hits  # 至少命中这些帧，防单帧误判
         self.show_preview = show_preview      # 是否生成实时预览帧（由主线程渲染）
         self.preview_frame = None             # 最新带标注预览帧(BGR)，供主线程读取
         self._preview_lock = threading.Lock()
         self._stop = False
         self._thread = None
         self._last_trigger = {}               # {(hand, gesture): 最近触发时间}，冷却按 手+手势 分开
-        # 以下状态均按手 (left/right/unknown) 分开，避免双手互相污染
-        self._frame_streak = {"left": 0, "right": 0, "unknown": 0}  # 当前手势连续出现帧数
-        self._last_gesture = {"left": None, "right": None, "unknown": None}  # 最近一帧识别到的手势
+        # 以下状态均按手 (left/right/unknown) 分开，避免双手互相污染。
+        # 消抖状态机基于时间而非帧数：低帧率摄像头（实测 7.5fps）下按帧计数会永远凑不够。
+        self._state = {h: {"gesture": None, "since": 0.0, "hits": 0, "last_seen": 0.0}
+                       for h in ("left", "right", "unknown")}
 
     @property
     def available(self):
@@ -222,6 +241,31 @@ class GestureRecognizer:
             return None
         return None
 
+    def _is_stable(self, hand, g, now):
+        """基于时间的消抖：同一手势持续 confirm_hold 秒且至少命中 confirm_min_hits 帧。
+
+        不按帧数判定，因为摄像头帧率差异很大（实测有 7.5fps 的机器，按帧计数
+        在固定时间窗内永远凑不够样本，表现为"怎么做手势都没反应"）。
+        中间漏检或单帧误判由 confirm_gap 容忍，换手势会立即重置计时。
+        """
+        st = self._state[hand]
+        # 手或手势消失超过容忍时长：重置，避免"手离开很久再回来"直接触发
+        if st["gesture"] is not None and now - st["last_seen"] > self.confirm_gap:
+            st["gesture"] = None
+            st["hits"] = 0
+        if g is None:
+            return False
+        st["last_seen"] = now
+        if g != st["gesture"]:
+            st["gesture"] = g
+            st["since"] = now
+            st["hits"] = 1
+            return False
+        st["hits"] += 1
+        if st["hits"] < self.confirm_min_hits:
+            return False
+        return now - st["since"] >= self.confirm_hold
+
     def _trigger(self, hand, gesture):
         key = (hand, gesture)
         now = time.time()
@@ -237,8 +281,10 @@ class GestureRecognizer:
 
         不同机器上可用的后端不同（DSHOW/MSMF/默认），且有的后端能打开却只返回黑帧，
         因此这里不仅看 isOpened，还预热读若干帧判断是否黑屏。
+        后端优先 MSMF：实测同一摄像头 MSMF 约 18fps、DSHOW 只有 6fps，
+        帧率过低会让手势判定明显迟滞。
         """
-        backends = [("DSHOW", cv2.CAP_DSHOW), ("MSMF", cv2.CAP_MSMF), ("ANY", cv2.CAP_ANY)]
+        backends = [("MSMF", cv2.CAP_MSMF), ("DSHOW", cv2.CAP_DSHOW), ("ANY", cv2.CAP_ANY)]
         for name, backend in backends:
             if self._stop:      # 已被要求停止：立刻放弃，不再占用摄像头
                 return None
@@ -249,24 +295,37 @@ class GestureRecognizer:
             if not cap.isOpened():
                 cap.release()
                 continue
+            # 限制采集分辨率与帧率：默认可能给 1080p，MediaPipe 推理跟不上会让帧率掉到个位数
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+            cap.set(cv2.CAP_PROP_FPS, 30)
+            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)   # 只留最新一帧，降低手部拖拽延迟
             ok_any = False
+            good = False
+            t_warm = time.monotonic()
             for _ in range(10):  # 预热并检测黑帧
                 if self._stop:
                     cap.release()
                     return None
                 ok, f = cap.read()
                 if ok and f is not None and float(f.mean()) > 1.0:
-                    print(f"[手势识别] 摄像头后端 {name} 可用，画面正常。")
-                    return cap
+                    good = True
                 if ok:
                     ok_any = True
+            warm_fps = 10 / max(time.monotonic() - t_warm, 1e-6)
+            if good:
+                print(f"[手势识别] 摄像头后端 {name} 可用，画面正常（预热帧率≈{warm_fps:.1f}fps）。")
+                print(f"[手势识别] 采集参数: "
+                      f"{int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))}x"
+                      f"{int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))} @ "
+                      f"{cap.get(cv2.CAP_PROP_FPS):.0f}fps")
+                return cap
             print(f"[手势识别] 摄像头后端 {name} {'只返回黑帧' if ok_any else '读取失败'}，尝试下一个。")
             cap.release()
             time.sleep(0.3)  # 给驱动一点时间彻底释放，再试下一个后端
         return None
 
     def _run(self):
-        global _ts_ms
         cap = self._open_camera()
         if cap is None:
             print("[手势识别] 无法打开摄像头，摄像头手势功能已禁用。")
@@ -294,8 +353,8 @@ class GestureRecognizer:
                 frame = cv2.flip(frame, 1)  # 镜像，更符合操作直觉
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
-                _ts_ms += 33     # 复用的实例要求时间戳跨会话单调递增，不能用会话内局部计数
-                result = landmarker.detect_for_video(mp_image, _ts_ms)
+                # 时间戳按真实时间推进，与真实帧率一致（跨会话严格单调）
+                result = landmarker.detect_for_video(mp_image, _next_timestamp())
                 gesture = None       # 最近一次实际触发的手势（供预览显示）
                 gesture_hands = {}   # {hand: gesture}，供预览标记左右手
                 hand_pts = {}        # {hand: wrist landmark}，用于连续手部位置上报
@@ -303,24 +362,17 @@ class GestureRecognizer:
                     hand_pts[self._hand_label(result.handedness[i] if result.handedness else None)] = lm[0]
 
                 if result.hand_landmarks:
+                    now = time.monotonic()
                     # 逐手独立判定、独立消抖
                     for i, lm in enumerate(result.hand_landmarks):
                         hand = self._hand_label(result.handedness[i] if result.handedness else None)
                         g = self._classify(lm, hand)
-                        # 每只手：同一手势需连续 confirm_frames 帧稳定出现才触发（防瞬时误触发）
                         if g:
-                            self._frame_streak[hand] = self._frame_streak[hand] + 1 if g == self._last_gesture[hand] else 1
-                            self._last_gesture[hand] = g
                             gesture_hands[hand] = g
-                            if self._frame_streak[hand] >= self.confirm_frames:
-                                self._frame_streak[hand] = 0
+                            if self._is_stable(hand, g, now):
                                 gesture = g
                                 self._trigger(hand, g)
-                        else:
-                            self._frame_streak[hand] = 0
-                else:
-                    for k in self._frame_streak:
-                        self._frame_streak[k] = 0
+                # 手离开画面时时间状态会按 confirm_gap 自动过期
 
                 # 连续上报每只手的归一化坐标（无手则上报 None，供主程序松手）
                 if self.move_callback:

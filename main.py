@@ -51,7 +51,7 @@ try:
     from gesture_recognizer import GestureRecognizer, is_available as gesture_is_available
     HAS_GESTURE = gesture_is_available()
     if not HAS_GESTURE:
-        print("[GESTURE] 摄像头手势功能不可用（缺 mediapipe/opencv 或手势模型）。")
+        print("[GESTURE] 摄像头手势功能不可用（缺 mediapipe tasks 或 opencv）。")
 except ImportError:
     HAS_GESTURE = False
     gesture_is_available = lambda: False
@@ -224,6 +224,10 @@ action_queue = queue.Queue()
 # 非双偶布局时没有消费者，ScriptPlayer 会自动把右偶台词回落到左队列。
 action_queue_right = queue.Queue()
 last_question_time = time.time()
+# 是否正在等待回答：提问后到回复显示前为 True，用于界面显示"正在思考"
+pending_question = False
+# 提问序号：新提问或点"停止"时递增，使旧回答失效
+question_seq = 0
 dh_system = None
 gesture_recognizer = None   # [GESTURE]
 gesture_mode_on = False     # [GESTURE] 手势控制开关（按钮控制）
@@ -287,8 +291,10 @@ def enqueue_gesture_action(hand: str, gesture_name: str):  # [GESTURE]
     if not entry:
         return
     action_path, reply = entry
-    target = (PUPPETS[1] if len(PUPPETS) > 1 and hand == "right"
-              else PUPPETS[0] if PUPPETS else None)
+    # 先取快照再索引：主线程重建布局时会 clear()+append()，直接按索引读会越界打死手势线程
+    puppets = list(PUPPETS)
+    target = (puppets[1] if len(puppets) > 1 and hand == "right"
+              else puppets[0] if puppets else None)
     if target is None:
         print(f"[GESTURE] {hand}手 手势 '{gesture_name}' 触发动作，但人偶未就绪，已忽略: {action_path}")
         return
@@ -412,6 +418,54 @@ def _script_active() -> bool:
     return bool(getattr(player, "is_playing", False) or getattr(player, "is_paused", False))
 
 
+def stop_other_features(*, keep_script=False, keep_video=False):
+    """功能互斥：开始一项功能前，停掉其它正在播放/生成的内容，避免画面与声音叠加。"""
+    if not keep_script and _script_active():
+        try:
+            script_system.stop()
+            print("[打断] 已停止剧本播放")
+        except Exception as e:  # noqa: BLE001
+            print(f"[打断] 停止剧本失败: {e}")
+    if not keep_video and _video_active():
+        try:
+            video_system.stop()
+            print("[打断] 已停止视频播放")
+        except Exception as e:  # noqa: BLE001
+            print(f"[打断] 停止视频失败: {e}")
+    if HAS_TTS and tts_engine is not None:
+        try:
+            tts_engine.stop()
+        except Exception as e:  # noqa: BLE001
+            print(f"[打断] 停止语音失败: {e}")
+
+
+def reset_runtime_state():
+    """停止按钮：中断剧本/视频/语音/待答问题，清空动作队列，人偶回到初始站位。"""
+    global pending_question, question_seq
+    question_seq += 1          # 让在途回答失效，避免停止后又冒出来
+    pending_question = False
+    stop_other_features()
+    if script_system is not None:
+        try:
+            # 播放已在 stop_other_features() 中停止，这里只清剧本信息
+            script_system.current_script = None
+            script_system.current_play_name = None
+        except Exception as e:  # noqa: BLE001
+            print(f"[停止] 重置剧本失败: {e}")
+    # 清空待执行动作（含排队中的回答），避免停止后继续播
+    for q in (action_queue, action_queue_right):
+        while True:
+            try:
+                q.get_nowait()
+            except queue.Empty:
+                break
+    for p in list(PUPPETS):
+        try:
+            p.reset_pose()
+        except Exception as e:  # noqa: BLE001
+            print(f"[停止] 重置人偶失败: {e}")
+
+
 def handle_video_command(text: str) -> bool:
     """处理含“视频”关键词的指令；返回 True 表示已接管。
 
@@ -433,6 +487,7 @@ def handle_video_command(text: str) -> bool:
             if not rest or any(k in rest for k in ("目录", "列表")):
                 action_queue.put((["idle"], video_system.list_local_videos()))
             else:
+                stop_other_features(keep_video=True)   # 视频优先：打断剧本/语音
                 video_system.load_local_file(rest)
         except Exception as e:  # noqa: BLE001
             print(f"[视频错误] {e}")
@@ -488,6 +543,7 @@ def handle_video_command(text: str) -> bool:
         # 播放/表演（放在暂停/继续/停止之后，避免“继续播放”被误判为换片）
         if any(k in cmd for k in ("播放", "表演")):
             name = cmd.replace("播放", "").replace("表演", "").strip()
+            stop_other_features(keep_video=True)   # 视频优先：打断剧本/语音
             if name:
                 video_system.load_and_play(name)
             elif video_system.current_script:
@@ -610,8 +666,10 @@ def create_output_box(width, height):
 
 def process_and_enqueue(text: str):
 
-    global last_recognized_text, recognized_text_timer, last_question_time, script_system, SCRIPT_MODE_ENABLED, share_system, SHARE_MODE_ENABLED
+    global last_recognized_text, recognized_text_timer, last_question_time, script_system, SCRIPT_MODE_ENABLED, share_system, SHARE_MODE_ENABLED, pending_question
 
+    my_seq = question_seq          # 本次提问序号：被"停止"或新提问打断后作废
+    pending_question = False       # 命令类输入不进入思考态；仅 Agent 问答会重新置位
     text = text.strip()
     if not text:
         print("[Agent] 输入为空，忽略。")
@@ -647,6 +705,7 @@ def process_and_enqueue(text: str):
                         ["剧本", "播放", "表演", "暂停", "继续", "停止", "状态", "目录", "列表"])
         if is_script:
             print(f"[剧本] 拦截命令: {text}")
+            stop_other_features(keep_script=True)   # 剧本优先：打断视频/语音
             try:
                 # ---------- 目录/列表命令 ----------
                 if "目录" in text or "列表" in text:
@@ -752,7 +811,9 @@ def process_and_enqueue(text: str):
         action_queue.put((['idle'], "Agent系统似乎出了一些问题。"))
         return
 
+    stop_other_features()          # 问答优先：打断正在播放的剧本/视频/语音
     last_question_time = time.time()
+    pending_question = True
 
     try:
 
@@ -767,6 +828,9 @@ def process_and_enqueue(text: str):
         if not acts:
              acts = ['idle']
 
+        if my_seq != question_seq:
+            print("[中止] 该回答已被停止或新提问打断，丢弃")
+            return
         action_queue.put((acts, reply))
 
         last_recognized_text = ""
@@ -1059,6 +1123,19 @@ class Puppet:
         with self._drag_lock:
             return self.last_pelvis_abs['x'] + self.drag_offset['x']
 
+    def reset_pose(self):
+        """停止按钮：清空动作与拖拽，回到初始站位。"""
+        self.state = 'idle'
+        self.action_frames = []
+        self.json_list = []
+        self.action_idx = 0
+        self.action_initial_joints = {}
+        self.current_offset = dict(self.initial_offset)
+        self.last_pelvis_abs = {'x': self.center_x + self.x_shift, 'y': self.center_y}
+        with self._drag_lock:
+            self.drag_offset = {'x': 0.0, 'y': 0.0}
+            self.drag_target = {'x': 0.0, 'y': 0.0}
+
     def _dequeue_action(self, w, h):
         """空闲时若有请求则加载动作进入 action 状态。返回 (是否处理, 回复文本)。
 
@@ -1337,7 +1414,7 @@ def pygame_loop():
     input_text_offset_y = 16  # 文本靠上，底部留给按钮行
     toolbar_h = 52
     toolbar_y = toolbar_x = 0
-    gesture_button_rect = script_button_rect = share_button_rect = None
+    gesture_button_rect = script_button_rect = share_button_rect = stop_button_rect = None
     button_rect = cur_char_rect = left_char_rect = right_char_rect = None
 
     def _layout_bottom():
@@ -1345,7 +1422,7 @@ def pygame_loop():
         nonlocal input_box_img, input_box_rect, input_box_x, input_box_y, \
             input_box_width, input_box_height, input_text_rect, \
             toolbar_y, toolbar_x, gesture_button_rect, script_button_rect, \
-            share_button_rect, button_rect, cur_char_rect, left_char_rect, right_char_rect
+            share_button_rect, stop_button_rect, button_rect, cur_char_rect, left_char_rect, right_char_rect
         margin = 15
         gap = 12
         pad_x = 18
@@ -1382,6 +1459,8 @@ def pygame_loop():
         gesture_button_rect = pygame.Rect(toolbar_x, toolbar_y, _gw, toolbar_h_)
         script_button_rect = pygame.Rect(gesture_button_rect.right + gap, toolbar_y, _sw, toolbar_h_)
         share_button_rect = pygame.Rect(script_button_rect.right + gap, toolbar_y, _shw, toolbar_h_)
+        _stopw = input_font.get_rect("停止").width + pad_x * 2
+        stop_button_rect = pygame.Rect(share_button_rect.right + gap, toolbar_y, _stopw, toolbar_h_)
 
         # 文本输入可点击区域（不含底部按钮行），避免点按钮时误激活输入
         input_text_rect = pygame.Rect(input_box_x, input_box_y, input_box_width,
@@ -1419,6 +1498,8 @@ def pygame_loop():
     def _show_reply(reply):
         """某个人偶触发的回复：更新共享输出框并 TTS 播报。"""
         nonlocal text_reply, output_visible, output_fade_timer
+        global pending_question
+        pending_question = False      # 回复已到达，结束"正在思考"状态
         reply = _clean_reply(reply)
         text_reply = reply or ""
         output_visible = bool(reply)
@@ -1428,6 +1509,34 @@ def pygame_loop():
                 print("[TTS] 视频播放中，仅显示文字，跳过语音（避免与视频声音重叠）")
             else:
                 tts_engine.speak_async(reply)  # TTS 播报
+
+    def _submit_text(text):
+        """提交问题：清空上一条回答，再后台处理（思考提示由 pending_question 驱动）。"""
+        nonlocal text_reply, output_visible, output_fade_timer
+        global question_seq
+        text = text.strip()
+        if not text:
+            return
+        question_seq += 1          # 新提问让上一条在途回答失效
+        text_reply = ""
+        output_visible = False
+        output_fade_timer = 0
+        threading.Thread(target=process_and_enqueue, args=(text,), daemon=True).start()
+
+    def _stop_all():
+        """停止按钮：中断剧本/视频/语音/待答问题，人偶回初始站位，清空输入与回答。"""
+        nonlocal text_reply, output_visible, output_fade_timer
+        global input_text, typing, ime_composing_text
+        reset_runtime_state()
+        text_reply = ""
+        output_visible = False
+        output_fade_timer = 0
+        input_text = ""
+        ime_composing_text = ""
+        if typing:
+            typing = False
+            pygame.key.stop_text_input()
+        print("[停止] 已中断当前功能并回到初始状态")
 
     # [拖拽] 连续手部位置 -> 对应偶平移（相对增量，松手保持）
     hand_prev = {"left": None, "right": None, "unknown": None}
@@ -1680,7 +1789,7 @@ def pygame_loop():
                                         _build_layout()  # 启动失败，回退常态单人居中
                             else:
                                 gesture_mode_on = False
-                                print("[GESTURE] 手势功能不可用（缺 mediapipe/opencv 或模型）")
+                                print("[GESTURE] 手势功能启动失败（依赖缺失或模型不可用）")
                         else:
                             if gesture_recognizer is not None:
                                 gesture_recognizer.stop()
@@ -1722,6 +1831,10 @@ def pygame_loop():
                             print(f"[分享] 分享功能已{'开启' if SHARE_MODE_ENABLED else '关闭'}")
                         recognized_text_timer = RECOGNIZED_TEXT_DURATION
 
+                    # [停止] 一键中断：剧本/视频/语音/待答问题，回到初始状态
+                    if stop_button_rect is not None and stop_button_rect.collidepoint(ev.pos):
+                        _stop_all()
+
             elif ev.type == pygame.KEYDOWN:
                 # [视频集成] 视频控件优先处理（Esc 退出播放 / ←→ 快退快进）
                 if _video_active() and video_system is not None and hasattr(video_system, "handle_key"):
@@ -1748,7 +1861,7 @@ def pygame_loop():
                          print("输入框已取消激活 (Tab)。")
                          if input_text.strip():
                              print(f"提交文本 (Tab): {input_text.strip()}")
-                             threading.Thread(target=process_and_enqueue, args=(input_text.strip(),), daemon=True).start()
+                             _submit_text(input_text)
                          input_text = ""
 
                 elif typing and input_mode == "text":
@@ -1758,7 +1871,7 @@ def pygame_loop():
                         typing = False
                         ime_composing_text = ""
                         if input_text.strip():
-                            threading.Thread(target=process_and_enqueue, args=(input_text.strip(),), daemon=True).start()
+                            _submit_text(input_text)
                         input_text = ""
                     elif ev.key == pygame.K_BACKSPACE:
                         input_text = input_text[:-1]
@@ -1840,7 +1953,7 @@ def pygame_loop():
             except Exception as e:  # noqa: BLE001
                 print(f"[视频] 渲染失败: {e}")
 
-        if output_visible and text_reply:
+        if output_visible and text_reply and not pending_question:
             max_text_width = w * 0.95
             padding_x = 20
             padding_y = 15
@@ -1887,7 +2000,7 @@ def pygame_loop():
                                          UI_COLORS["text"])
                      current_y += text_rects[i].height + line_spacing
 
-        elif output_visible and output_fade_timer > 0:
+        elif output_visible and output_fade_timer > 0 and not pending_question:
             output_fade_timer -= 1
             if output_box_img and output_box_rect:
                  alpha = int(min(1.0, output_fade_timer / OUTPUT_FADE_DURATION) * UI_COLORS["output_bg"][3])
@@ -1898,6 +2011,16 @@ def pygame_loop():
                  output_box_img = None
                  output_box_rect = None
 
+
+        # ===== 思考中提示：提问后、回答出现前显示，避免误以为没反应 =====
+        if pending_question:
+            think_text = "正在思考" + "." * (int(time.time() * 2) % 4)
+            think_rect = main_font.get_rect(think_text)
+            think_w, think_h = think_rect.width + 44, think_rect.height + 26
+            think_x, think_y = (w - think_w) // 2, 22
+            think_img = create_output_box(think_w, think_h)
+            screen.blit(think_img, (think_x, think_y))
+            main_font.render_to(screen, (think_x + 22, think_y + 13), think_text, UI_COLORS["text"])
 
         # ===== 输入框：始终绘制（文本区 + 底部按钮行）=====
         screen.blit(input_box_img, input_box_rect.topleft)
@@ -1981,6 +2104,13 @@ def pygame_loop():
         sh_surf, sh_rect = input_font.render(share_btn_text, UI_COLORS["text_light"])
         sh_rect.center = share_button_rect.center
         screen.blit(sh_surf, sh_rect)
+
+        # 停止按钮：中断所有正在播放/生成的内容并回到初始状态
+        pygame.draw.rect(screen, (190, 70, 55), stop_button_rect, border_radius=8)
+        pygame.draw.rect(screen, (80, 80, 80), stop_button_rect, width=2, border_radius=8)
+        st_surf, st_rect = input_font.render("停止", UI_COLORS["text_light"])
+        st_rect.center = stop_button_rect.center
+        screen.blit(st_surf, st_rect)
 
         # 状态提示（按钮行上方）：手势提示右对齐 / 剧目状态左对齐
         if gesture_mode_on:
