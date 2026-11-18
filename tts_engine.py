@@ -1,4 +1,4 @@
-﻿﻿# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """海宁皮影戏 · 本地 Piper TTS 引擎
 piper 主程序与语音模型位于 PIPER_EXE / VOICE_MODEL 所指路径。
 注意：piper 必须放在【无中文】的路径下，否则 espeak-ng 会报 "Illegal byte sequence" 错误。
