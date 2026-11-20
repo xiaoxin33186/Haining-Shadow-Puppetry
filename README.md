@@ -17,6 +17,7 @@
 - [剧本系统与生成](#剧本系统与生成)
 - [分享卡片系统](#分享卡片系统)
 - [本地语音播报（TTS）](#本地语音播报tts)
+- [空场伴奏（海宁文化馆录制）](#空场伴奏海宁文化馆录制)
 - [视频播放](#视频播放)
 - [参考](#参考)
 - [主项目环境](#主项目环境)
@@ -267,6 +268,15 @@ flowchart TD
 
 ---
 
+## 空场伴奏（海宁文化馆录制）
+
+根目录 `33.全景台.MP3`（约 5 分 21 秒）用于演出空场/观众体验时循环播放。
+- `stage_bgm.py` 固定占用 0 号通道（`set_reserved(1)`），不占用 TTS 的 `mixer.music`，也不与视频声音抢通道。
+- 视频/剧本/思考/TTS/分享弹层期间自动淡出，结束后淡入；工具栏 ♪ 图标可随时关闭/开启。
+- 音量默认 0.15（`stage_bgm.DEFAULT_VOLUME`），觉得响/轻直接改这个常量；替换音频保持同名放根目录即可。
+
+---
+
 ## 视频播放
 
 视频播放器 `video_player_system.py` 内嵌在 pygame 主界面中（皮影人站在两侧），**在线片库**与**本机文件**两条来源共用同一套播放、声音与控制逻辑。
@@ -453,6 +463,8 @@ bull_demon_king_material/    # 牛魔王
 sha_wujing_material/         # 旧沙僧（已停用，素材保留）
 new_sha_wujing_material/     # 新沙僧（当前使用）
 zhu_bajie_material/          # 猪八戒
+tang_sanzang_material/       # 唐三藏
+new_zhu_bajie_material/      # 新猪八戒
 shadow_play_material/        # 海宁通用（已停用，备用）
 ```
 
