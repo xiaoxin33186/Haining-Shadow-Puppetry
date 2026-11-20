@@ -110,6 +110,10 @@ share_cards/
 # 视频系统：手动下载的视频体积大不入库（video_cache.json 作为断网兜底缓存入库）
 download_videos/
 
+# 本地方案草稿与生成剧本导出（仅本地留存，不入库）
+/docs/皮影人动作系统优化方案.md
+/generated_scripts/神话故事/
+
 # 本地演示材料（PPT、架构图、评审素材，仅本地留存）
 /工程构建与交付.pptx
 /工程构建与交付_PPT大纲.md
