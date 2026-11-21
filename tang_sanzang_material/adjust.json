@@ -1,0 +1,143 @@
+{
+  "parts": {
+    "body": [
+      47,
+      4,
+      0.0,
+      0.0
+    ],
+    "head": [
+      50,
+      1,
+      -10.491272694355732,
+      23.91747012976053
+    ],
+    "right_hip": [
+      71,
+      4,
+      46.110989854142474,
+      32.53257644176483
+    ],
+    "right_knee": [
+      30,
+      4,
+      27.508192217027815,
+      -15.058749472772718
+    ],
+    "left_hip": [
+      1,
+      4,
+      -9.233014390275285,
+      35.13642203807831
+    ],
+    "left_knee": [
+      18,
+      4,
+      13.012513959729997,
+      -14.174135481989026
+    ],
+    "right_elbow": [
+      29,
+      2,
+      81.05493442432301,
+      3.2459341609800205
+    ],
+    "right_wrist": [
+      113,
+      58,
+      65.59484688011375,
+      29.63158036244883
+    ],
+    "left_elbow": [
+      29,
+      2,
+      -21.15347011669262,
+      -4.864658204284872
+    ],
+    "left_wrist": [
+      113,
+      58,
+      -49.36742576392921,
+      24.160238752493996
+    ]
+  },
+  "rot": {
+    "body": -5.38,
+    "head": -8.12,
+    "right_hip": -4.65,
+    "right_knee": -2.28,
+    "left_hip": 2.85,
+    "left_knee": 0.09,
+    "right_elbow": -0.24,
+    "right_wrist": 19.29,
+    "left_elbow": 8.59,
+    "left_wrist": 17.94
+  },
+  "mirror": {
+    "body": false,
+    "head": false,
+    "right_hip": false,
+    "right_knee": false,
+    "left_hip": false,
+    "left_knee": false,
+    "right_elbow": false,
+    "right_wrist": false,
+    "left_elbow": false,
+    "left_wrist": false
+  },
+  "draw": {
+    "body": 3,
+    "head": 2,
+    "right_hip": 1,
+    "right_knee": 3,
+    "left_hip": 1,
+    "left_knee": 3,
+    "right_elbow": 4,
+    "right_wrist": 4,
+    "left_elbow": 1,
+    "left_wrist": 2
+  },
+  "pivot": {
+    "body": [
+      47,
+      4
+    ],
+    "head": [
+      50,
+      1
+    ],
+    "right_hip": [
+      71,
+      4
+    ],
+    "right_knee": [
+      30,
+      4
+    ],
+    "left_hip": [
+      1,
+      4
+    ],
+    "left_knee": [
+      18,
+      4
+    ],
+    "right_elbow": [
+      29,
+      2
+    ],
+    "right_wrist": [
+      113,
+      58
+    ],
+    "left_elbow": [
+      29,
+      2
+    ],
+    "left_wrist": [
+      113,
+      58
+    ]
+  },
+  "scene_mirror": false
+}

@@ -56,6 +56,8 @@ CHAR_DISPLAY = {
     # "sha_wujing_material": "沙僧",               # [停用] 已由新沙僧取代
     "new_sha_wujing_material": "新沙僧",
     "zhu_bajie_material": "猪八戒",
+    "tang_sanzang_material": "唐三藏",
+    "new_zhu_bajie_material": "新猪八戒",
 }
 
 # [停用角色] 素材目录保留，但不进入可选角色池（按钮循环里不会再切到）
@@ -70,7 +72,8 @@ def _candidate_dirs():
              # "wukong_shadow_play_material",  # [停用] 旧悟空
              # "shadow_play_material",         # [停用] 海宁通用
              "bull_demon_king_material",
-             "new_sha_wujing_material", "zhu_bajie_material"]
+             "new_sha_wujing_material", "zhu_bajie_material",
+             "tang_sanzang_material", "new_zhu_bajie_material"]
     found = []
     try:
         for d in sorted(os.listdir(PROJECT)):

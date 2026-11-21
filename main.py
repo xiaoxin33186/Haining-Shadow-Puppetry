@@ -46,6 +46,15 @@ if HAS_TTS:
 else:
     print("[TTS] Piper 未安装（项目内 piper/ 目录），语音播报禁用")
 
+# [BGM] 空场伴奏（音频由海宁文化馆录制，根目录 33.全景台.MP3）
+try:
+    import stage_bgm
+    HAS_BGM = True
+except Exception as e:  # noqa: BLE001
+    HAS_BGM = False
+    stage_bgm = None
+    print(f"[BGM] 伴奏模块不可用: {e}")
+
 # [GESTURE] 摄像头抽象手势识别（按需启动），缺依赖时优雅禁用
 try:
     from gesture_recognizer import GestureRecognizer, is_available as gesture_is_available
@@ -249,6 +258,9 @@ video_system = None
 share_system = None
 SHARE_MODE_ENABLED = False
 
+# [BGM] 空场伴奏开关（主界面 ♪ 图标切换，默认开启）
+bgm_enabled = True
+
 
 def load_puppet_roles():  # [角色切换]
     """读取 puppet_roles.json，返回 (left, right)；缺失/非法时回退默认常量。"""
@@ -416,6 +428,27 @@ def _script_active() -> bool:
     if player is None:
         return False
     return bool(getattr(player, "is_playing", False) or getattr(player, "is_paused", False))
+
+
+def _bgm_should_play() -> bool:
+    """空场伴奏的播放条件：只在没有正式内容时循环。
+
+    视频、剧本、思考中、分享卡片弹层、TTS 播报任意一项活跃时都让路，
+    其余时间（含手势体验、观众上手操作）都视为“空场”，可以放伴奏。
+    """
+    if _video_active() or _script_active():
+        return False
+    if pending_question:
+        return False
+    if share_system is not None and share_system.is_card_visible():
+        return False
+    if HAS_TTS:
+        try:
+            if pygame.mixer.get_init() and pygame.mixer.music.get_busy():
+                return False
+        except Exception:
+            pass
+    return True
 
 
 def stop_other_features(*, keep_script=False, keep_video=False):
@@ -1298,7 +1331,7 @@ def _fit_window_size(logical_w: int, logical_h: int) -> tuple:
 def pygame_loop():
     global is_recording, last_recognized_text, recognized_text_timer, input_text, typing, ime_composing_text, \
            gesture_mode_on, gesture_recognizer, PUPPETS, CHAR_PUPPET0, CHAR_PUPPET1, \
-           script_system, SCRIPT_MODE_ENABLED, share_system, SHARE_MODE_ENABLED
+           script_system, SCRIPT_MODE_ENABLED, share_system, SHARE_MODE_ENABLED, bgm_enabled
 
     print("初始化 Pygame 及资源...")
     pygame.init()
@@ -1334,6 +1367,17 @@ def pygame_loop():
     pygame.display.set_caption("皮影数字人 (文本: Tab/回车, 语音: Space)")
     screen = pygame.Surface((logical_w, logical_h)).convert()
     print(f"[窗口] 逻辑画布 {logical_w}x{logical_h}，初始窗口 {win_w}x{win_h}（可拖拽缩放）")
+
+    # [BGM] 空场伴奏：演出空场/观众体验时循环，正式内容开始时自动淡出
+    bgm_player = None
+    if HAS_BGM and stage_bgm is not None:
+        try:
+            bgm_player = stage_bgm.StageBGM()
+            if bgm_player.available:
+                print(f"[BGM] 空场伴奏已就绪：{stage_bgm.DEFAULT_AUDIO}（海宁文化馆录制）")
+        except Exception as e:  # noqa: BLE001
+            print(f"[BGM] 空场伴奏初始化失败，已跳过: {e}")
+            bgm_player = None
 
     _scaled_surface = None
     _scaled_size = (0, 0)
@@ -1415,6 +1459,7 @@ def pygame_loop():
     toolbar_h = 52
     toolbar_y = toolbar_x = 0
     gesture_button_rect = script_button_rect = share_button_rect = stop_button_rect = None
+    bgm_button_rect = None
     button_rect = cur_char_rect = left_char_rect = right_char_rect = None
 
     def _layout_bottom():
@@ -1422,7 +1467,7 @@ def pygame_loop():
         nonlocal input_box_img, input_box_rect, input_box_x, input_box_y, \
             input_box_width, input_box_height, input_text_rect, \
             toolbar_y, toolbar_x, gesture_button_rect, script_button_rect, \
-            share_button_rect, stop_button_rect, button_rect, cur_char_rect, left_char_rect, right_char_rect
+            share_button_rect, stop_button_rect, bgm_button_rect, button_rect, cur_char_rect, left_char_rect, right_char_rect
         margin = 15
         gap = 12
         pad_x = 18
@@ -1461,6 +1506,8 @@ def pygame_loop():
         share_button_rect = pygame.Rect(script_button_rect.right + gap, toolbar_y, _shw, toolbar_h_)
         _stopw = input_font.get_rect("停止").width + pad_x * 2
         stop_button_rect = pygame.Rect(share_button_rect.right + gap, toolbar_y, _stopw, toolbar_h_)
+        # 空场伴奏开关：正方形图标，紧跟在“停止”右侧
+        bgm_button_rect = pygame.Rect(stop_button_rect.right + gap, toolbar_y, toolbar_h_, toolbar_h_)
 
         # 文本输入可点击区域（不含底部按钮行），避免点按钮时误激活输入
         input_text_rect = pygame.Rect(input_box_x, input_box_y, input_box_width,
@@ -1835,6 +1882,11 @@ def pygame_loop():
                     if stop_button_rect is not None and stop_button_rect.collidepoint(ev.pos):
                         _stop_all()
 
+                    # [BGM] 背景伴奏开关（♪ 图标）
+                    if bgm_button_rect is not None and bgm_button_rect.collidepoint(ev.pos):
+                        bgm_enabled = not bgm_enabled
+                        print(f"[BGM] 空场伴奏已{'开启' if bgm_enabled else '关闭'}")
+
             elif ev.type == pygame.KEYDOWN:
                 # [视频集成] 视频控件优先处理（Esc 退出播放 / ←→ 快退快进）
                 if _video_active() and video_system is not None and hasattr(video_system, "handle_key"):
@@ -1903,6 +1955,10 @@ def pygame_loop():
                 ime_composing_text = ev.text
 
         if not running: break
+
+        # [BGM] 空场伴奏：无正式内容时循环，视频/剧本/播报/思考时淡出；♪ 图标可关闭
+        if bgm_player is not None:
+            bgm_player.update(bgm_enabled and _bgm_should_play(), delta_time)
 
         # 两人偶各自推进一帧状态机；触发回复时更新共享输出框并 TTS 播报
         j0 = j1 = None
@@ -2112,6 +2168,20 @@ def pygame_loop():
         st_rect.center = stop_button_rect.center
         screen.blit(st_surf, st_rect)
 
+        # 空场伴奏开关：音符图标（字体缺 ♪ 字形，直接用图元绘制），关闭时叠加斜杠
+        bgm_color = (100, 180, 100) if bgm_enabled else (120, 120, 120)
+        pygame.draw.rect(screen, bgm_color, bgm_button_rect, border_radius=8)
+        pygame.draw.rect(screen, (80, 80, 80), bgm_button_rect, width=2, border_radius=8)
+        _note = pygame.Surface((26, 30), pygame.SRCALPHA)
+        pygame.draw.ellipse(_note, (250, 245, 235), (0, 18, 15, 10))
+        pygame.draw.line(_note, (250, 245, 235), (13, 22), (13, 2), 3)
+        pygame.draw.line(_note, (250, 245, 235), (13, 2), (24, 8), 3)
+        screen.blit(_note, _note.get_rect(center=bgm_button_rect.center))
+        if not bgm_enabled:
+            pygame.draw.line(screen, (250, 245, 235),
+                             (bgm_button_rect.left + 10, bgm_button_rect.top + 10),
+                             (bgm_button_rect.right - 10, bgm_button_rect.bottom - 10), 3)
+
         # 状态提示（按钮行上方）：手势提示右对齐 / 剧目状态左对齐
         if gesture_mode_on:
             _l = pg_base.CHAR_DISPLAY.get(CHAR_PUPPET0, CHAR_PUPPET0)
@@ -2206,6 +2276,7 @@ def pygame_loop():
             "视频指令：视频目录 · 播放视频 <名称> · 停止视频",
             "剧本指令：剧本目录 · 播放剧本 <名称> · 生成剧本 <主题>",
             "分享卡片：说“生成分享卡片即可制作",
+            "空场伴奏：海宁文化馆录制，♪ 图标可开关",
             "底部按钮：手势交互 · 剧本 · 分享 · 人偶切换",
         ]
         _mouse_logical = _to_logical(pygame.mouse.get_pos())
