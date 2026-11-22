@@ -1,0 +1,1121 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>皮影骨骼原型 · 单肩轴 + 双髋轴</title>
+<style>
+  :root{
+    --paper:#f2e7d3;
+    --paper-2:#e9dbc2;
+    --ink:#33251a;
+    --ink-2:#6b5745;
+    --line:#d8c6a8;
+    --leather:#2b1d16;
+    --leather-2:#3b2a1f;
+    --gold:#d8b25a;
+    --accent:#a8452f;
+    --ok:#5d7a4f;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ height:100%; }
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:"Noto Serif SC","Songti SC","SimSun","Microsoft YaHei",serif;
+    overflow:hidden;
+  }
+  header{
+    height:64px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:0 22px;
+    background:linear-gradient(180deg,#33231a,#2b1d16);
+    border-bottom:2px solid #1c120d;
+    color:#f3e7d2;
+    box-shadow:0 2px 10px rgba(0,0,0,.25);
+    position:relative;
+    z-index:3;
+  }
+  .title{ min-width:0; }
+  .title h1{
+    margin:0;
+    font-size:19px;
+    letter-spacing:2px;
+    font-weight:600;
+  }
+  .title p{
+    margin:3px 0 0;
+    font-size:12px;
+    color:#c9b28d;
+    letter-spacing:1px;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .actions{ display:flex; gap:10px; flex-shrink:0; }
+  button{
+    font-family:inherit;
+    font-size:13px;
+    color:#3c2a1d;
+    background:linear-gradient(180deg,#f7edda,#e2cfae);
+    border:1px solid #bda27b;
+    border-radius:7px;
+    padding:7px 14px;
+    cursor:pointer;
+    white-space:nowrap;
+    box-shadow:0 1px 0 rgba(255,255,255,.5) inset,0 2px 4px rgba(0,0,0,.18);
+    transition:transform .08s ease, filter .15s ease;
+  }
+  button:hover{ filter:brightness(1.05); }
+  button:active{ transform:translateY(1px); }
+  button.primary{
+    color:#fff6e6;
+    background:linear-gradient(180deg,#b9553c,#963c27);
+    border-color:#7d2f1d;
+  }
+  button.ghost{
+    background:transparent;
+    color:#e8d7b9;
+    border-color:#6d543d;
+    box-shadow:none;
+  }
+  main{
+    height:calc(100% - 64px);
+    display:grid;
+    grid-template-columns:1fr 372px;
+  }
+  .stage-wrap{ position:relative; min-width:0; min-height:0; background:#15100c; }
+  canvas{ display:block; width:100%; height:100%; }
+  .tip{
+    font-size:12px;
+    line-height:1.7;
+    color:#6b5745;
+    background:rgba(255,250,240,.55);
+    border:1px dashed #cbb18c;
+    border-radius:7px;
+    padding:7px 10px;
+    margin:0 0 10px;
+  }
+  .badges{
+    position:absolute;
+    left:18px; top:16px;
+    display:flex; gap:8px;
+    pointer-events:none;
+  }
+  .badge{
+    font-size:12px;
+    letter-spacing:1px;
+    color:#f0dfc0;
+    background:rgba(20,14,10,.6);
+    border:1px solid rgba(216,178,90,.35);
+    border-radius:999px;
+    padding:4px 11px;
+  }
+  .badge b{ color:var(--gold); font-weight:600; }
+  aside{
+    background:linear-gradient(180deg,var(--paper),var(--paper-2));
+    border-left:1px solid #cbb693;
+    overflow-y:auto;
+    padding:14px 16px 30px;
+  }
+  aside::-webkit-scrollbar{ width:9px; }
+  aside::-webkit-scrollbar-thumb{ background:#c3ac87; border-radius:9px; }
+  .panel-title{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin:14px 0 8px;
+    padding-bottom:6px;
+    border-bottom:1px dashed #c9b391;
+  }
+  .panel-title:first-child{ margin-top:0; }
+  .panel-title h2{
+    margin:0;
+    font-size:14px;
+    letter-spacing:1px;
+    color:#5a3d29;
+  }
+  .panel-title span{ font-size:11px; color:var(--ink-2); }
+  .row{
+    display:grid;
+    grid-template-columns:96px 1fr 52px;
+    align-items:center;
+    gap:8px;
+    padding:4px 0;
+  }
+  .row label{ font-size:12px; color:#4d3828; letter-spacing:.3px; }
+  .row output{
+    font-size:12px;
+    text-align:right;
+    color:#7a4a2c;
+    font-variant-numeric:tabular-nums;
+  }
+  input[type=range]{
+    width:100%;
+    accent-color:var(--accent);
+    height:18px;
+  }
+  .checks{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:4px 10px;
+    padding:4px 0 2px;
+  }
+  .checks label{
+    display:flex;
+    align-items:center;
+    gap:6px;
+    font-size:12px;
+    color:#4d3828;
+    cursor:pointer;
+  }
+  input[type=checkbox]{ accent-color:var(--accent); }
+  .presets{ display:flex; gap:8px; margin:6px 0 2px; }
+  .presets button{ flex:1; font-size:12px; padding:6px 0; }
+  .summary{
+    margin-top:8px;
+    font-size:12px;
+    line-height:1.75;
+    color:#6b5745;
+    background:rgba(255,250,240,.55);
+    border:1px solid #d9c7a8;
+    border-radius:7px;
+    padding:8px 10px;
+  }
+  .summary b{ color:#8c3c28; font-weight:600; }
+  .toast{
+    position:fixed;
+    left:50%; bottom:28px;
+    transform:translate(-50%,16px);
+    background:#2b1d16;
+    color:#f2e3c6;
+    font-size:13px;
+    padding:9px 18px;
+    border-radius:8px;
+    border:1px solid #6d543d;
+    opacity:0;
+    pointer-events:none;
+    transition:opacity .2s ease, transform .2s ease;
+    z-index:9;
+  }
+  .toast.on{ opacity:1; transform:translate(-50%,0); }
+  @media (max-width:1180px){
+    header{ padding:0 14px; }
+  }
+  @media (max-width:900px){
+    main{ grid-template-columns:1fr; grid-template-rows:56vh 1fr; }
+    aside{ border-left:none; border-top:1px solid #cbb693; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="title">
+    <h1>皮影动作骨骼原型</h1>
+    <p>单肩轴 · 双髋轴 · 头插口 · 12 个受控量（可拖拽调骨架）</p>
+  </div>
+  <div class="actions">
+    <a href="index.html" style="align-self:center;color:#e8d7b9;font-size:13px;text-decoration:none;border:1px solid #6d543d;border-radius:7px;padding:7px 12px;white-space:nowrap;">返回目录</a>
+    <button id="btnSave">保存</button>
+    <button id="btnReset">恢复默认</button>
+    <button id="btnExport" class="primary">导出 rig.json</button>
+  </div>
+</header>
+
+<main>
+  <section class="stage-wrap" id="stageWrap">
+    <canvas id="stage"></canvas>
+    <div class="badges">
+      <div class="badge">肩：<b>单轴</b></div>
+      <div class="badge">髋：<b>双轴</b></div>
+      <div class="badge">自由度：<b>3 + 1 + 4 + 4 = 12</b></div>
+    </div>
+  </section>
+
+  <aside>
+    <p class="tip">拖金色骨眼：肩/胯改锚点，腕/踝改关节角，骨盆整体移动，头改俯仰；也可用右侧滑杆精调。调好后点“保存”，下次打开自动恢复。</p>
+    <div class="presets">
+      <button id="btnIdle">待机</button>
+      <button id="btnPunch">出拳</button>
+      <button id="btnKick">踢腿</button>
+    </div>
+    <div class="panel-title"><h2>骨架锚点</h2><span>决定皮子钉在哪</span></div>
+    <div class="row"><label>躯干长度</label><input type="range" id="torso_len" min="150" max="250" step="1"><output></output></div>
+    <div class="row"><label>肩点高度</label><input type="range" id="shoulder_t" min="0.55" max="0.98" step="0.01"><output></output></div>
+    <div class="row"><label>肩点微偏</label><input type="range" id="shoulder_out" min="-8" max="8" step="1"><output></output></div>
+    <div class="row"><label>胯点高度</label><input type="range" id="hips_t" min="-0.05" max="0.25" step="0.01"><output></output></div>
+    <div class="row"><label>左胯偏移</label><input type="range" id="hip_l" min="-45" max="-4" step="1"><output></output></div>
+    <div class="row"><label>右胯偏移</label><input type="range" id="hip_r" min="4" max="45" step="1"><output></output></div>
+
+    <div class="panel-title"><h2>骨长（按素材骨眼）</h2><span>钉死后不可拉伸</span></div>
+    <div class="row"><label>上臂</label><input type="range" id="upper_arm" min="55" max="120" step="1"><output></output></div>
+    <div class="row"><label>前臂+手</label><input type="range" id="forearm" min="55" max="120" step="1"><output></output></div>
+    <div class="row"><label>大腿</label><input type="range" id="thigh" min="85" max="150" step="1"><output></output></div>
+    <div class="row"><label>小腿+脚</label><input type="range" id="shin" min="70" max="130" step="1"><output></output></div>
+
+    <div class="panel-title"><h2>姿态</h2><span>关节只能绕骨眼转</span></div>
+    <div class="row"><label>躯干倾角</label><input type="range" id="torso_rot" min="-25" max="25" step="0.5"><output></output></div>
+    <div class="row"><label>头俯仰</label><input type="range" id="head_tilt" min="-10" max="10" step="0.5"><output></output></div>
+    <div class="row"><label>右肩</label><input type="range" id="shoulder_r" min="-40" max="155" step="1"><output></output></div>
+    <div class="row"><label>右肘</label><input type="range" id="elbow_r" min="0" max="150" step="1"><output></output></div>
+    <div class="row"><label>左肩</label><input type="range" id="shoulder_l" min="-40" max="155" step="1"><output></output></div>
+    <div class="row"><label>左肘</label><input type="range" id="elbow_l" min="0" max="150" step="1"><output></output></div>
+    <div class="row"><label>右髋</label><input type="range" id="hip_r_ang" min="-35" max="130" step="1"><output></output></div>
+    <div class="row"><label>右膝</label><input type="range" id="knee_r" min="0" max="140" step="1"><output></output></div>
+    <div class="row"><label>左髋</label><input type="range" id="hip_l_ang" min="-35" max="130" step="1"><output></output></div>
+    <div class="row"><label>左膝</label><input type="range" id="knee_l" min="0" max="140" step="1"><output></output></div>
+
+    <div class="panel-title"><h2>显示</h2><span>看结构，不看美术</span></div>
+    <div class="checks">
+      <label><input type="checkbox" id="view_far">远端肢体</label>
+      <label><input type="checkbox" id="view_labels">关节标注</label>
+      <label><input type="checkbox" id="view_limits">限位扇形</label>
+      <label><input type="checkbox" id="view_lengths">骨长数字</label>
+    </div>
+
+    <div class="summary" id="summary"></div>
+  </aside>
+</main>
+
+<div class="toast" id="toast">已导出 rig.json</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---------- 数学与几何 ----------
+  const rad = d => d * Math.PI / 180;
+  const deg = r => r * 180 / Math.PI;
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const add = (a, b) => ({ x: a.x + b.x, y: a.y + b.y });
+  const sub = (a, b) => ({ x: a.x - b.x, y: a.y - b.y });
+  const mul = (a, k) => ({ x: a.x * k, y: a.y * k });
+  const dot = (a, b) => a.x * b.x + a.y * b.y;
+  const cross = (a, b) => a.x * b.y - a.y * b.x;
+  const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+  // φ=0 朝下，+90 朝画面右（与方案 §7.4 一致）
+  const vec = phi => ({ x: Math.sin(rad(phi)), y: Math.cos(rad(phi)) });
+  const vphi = p => deg(Math.atan2(p.x, p.y));
+
+  // ---------- 骨骼数据（与文档一致：单肩轴 + 双髋轴） ----------
+  function defaults(){
+    return {
+      root: { x: 0, y: 0 },
+      torso: { len: 197, rot: 0 },
+      head: { len: 58, tilt: 0 },
+      anchors: {
+        shoulder: { t: 0.78, out: 0 },     // 两臂共用
+        left_hip: { t: 0.03, out: -11 },   // 远侧
+        right_hip: { t: 0.03, out: 11 }    // 近侧
+      },
+      bones: { upper_arm: 85, forearm: 80, thigh: 119, shin: 97 },
+      angles: {
+        shoulder_r: 16, elbow_r: 18,
+        shoulder_l: -8, elbow_l: 26,
+        hip_r: 7, knee_r: 5,
+        hip_l: -7, knee_l: 9
+      },
+      view: { far: true, labels: true, limits: false, lengths: true }
+    };
+  }
+
+  let rig = defaults();
+  let initialized = false;
+
+  // ---------- 画布 ----------
+  const wrap = document.getElementById('stageWrap');
+  const cvs = document.getElementById('stage');
+  const ctx = cvs.getContext('2d');
+  let W = 0, H = 0, DPR = 1;
+
+  function resize(){
+    const rect = wrap.getBoundingClientRect();
+    const oldW = W, oldH = H;
+    W = Math.max(320, rect.width);
+    H = Math.max(320, rect.height);
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    cvs.width = Math.round(W * DPR);
+    cvs.height = Math.round(H * DPR);
+    cvs.style.width = W + 'px';
+    cvs.style.height = H + 'px';
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    if(!initialized){
+      rig.root = { x: W * 0.5, y: H * 0.6 };
+      initialized = true;
+    }else{
+      rig.root.x *= W / oldW;
+      rig.root.y *= H / oldH;
+    }
+    draw();
+  }
+  new ResizeObserver(resize).observe(wrap);
+
+  // 视图缩放：保证整只影偶不超出画布，拖拽时反算回骨骼坐标
+  let viewK = 1;
+  function viewScale(){
+    const extentH = rig.torso.len + rig.head.len + rig.bones.thigh + rig.bones.shin + 40;
+    return clamp(Math.min(1, (H * 0.76) / extentH, (W * 0.40) / 230), 0.42, 1);
+  }
+  function scr(p){
+    return {
+      x: rig.root.x + (p.x - rig.root.x) * viewK,
+      y: rig.root.y + (p.y - rig.root.y) * viewK
+    };
+  }
+  function rigPoint(p){
+    return {
+      x: rig.root.x + (p.x - rig.root.x) / viewK,
+      y: rig.root.y + (p.y - rig.root.y) / viewK
+    };
+  }
+
+  // ---------- 求解（正向运动学） ----------
+  function geom(){
+    const P = rig.root;
+    const rot = rig.torso.rot;
+    const dir = { x: Math.sin(rad(rot)), y: -Math.cos(rad(rot)) };  // 骨盆→颈
+    const perp = { x: Math.cos(rad(rot)), y: Math.sin(rad(rot)) };  // 朝画面右
+    const neck = add(P, mul(dir, rig.torso.len));
+    const at = a => add(add(P, mul(dir, rig.torso.len * a.t)), mul(perp, a.out));
+
+    const S = at(rig.anchors.shoulder);
+    const HL = at(rig.anchors.left_hip);
+    const HR = at(rig.anchors.right_hip);
+
+    const shR = rot + rig.angles.shoulder_r;
+    const elR = shR + rig.angles.elbow_r;
+    const ER = add(S, mul(vec(shR), rig.bones.upper_arm));
+    const WR = add(ER, mul(vec(elR), rig.bones.forearm));
+
+    const shL = rot + rig.angles.shoulder_l;
+    const elL = shL + rig.angles.elbow_l;
+    const EL = add(S, mul(vec(shL), rig.bones.upper_arm));
+    const WL = add(EL, mul(vec(elL), rig.bones.forearm));
+
+    const hipRA = rot + rig.angles.hip_r;
+    const kneeRA = hipRA + rig.angles.knee_r;
+    const KR = add(HR, mul(vec(hipRA), rig.bones.thigh));
+    const AR = add(KR, mul(vec(kneeRA), rig.bones.shin));
+
+    const hipLA = rot + rig.angles.hip_l;
+    const kneeLA = hipLA + rig.angles.knee_l;
+    const KL = add(HL, mul(vec(hipLA), rig.bones.thigh));
+    const AL = add(KL, mul(vec(kneeLA), rig.bones.shin));
+
+    return { P, rot, dir, perp, neck, S, HL, HR, ER, WR, EL, WL, KR, AR, KL, AL,
+             shR, elR, shL, elL, hipRA, kneeRA, hipLA, kneeLA };
+  }
+
+  // ---------- 绘图小工具 ----------
+  function capsule(a, b, w, fill){
+    ctx.strokeStyle = fill;
+    ctx.lineWidth = w;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+  }
+  function rivet(p, r, fill, ring){
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, r + 2.5, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(216,178,90,.22)';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+    ctx.fillStyle = fill || '#d8b25a';
+    ctx.fill();
+    ctx.lineWidth = 1.4;
+    ctx.strokeStyle = 'rgba(60,35,20,.85)';
+    ctx.stroke();
+    if(ring){
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, r + 6, 0, Math.PI * 2);
+      ctx.setLineDash([3, 4]);
+      ctx.strokeStyle = 'rgba(216,178,90,.55)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  }
+  function label(p, text, align){
+    ctx.font = '12px "Noto Serif SC","Microsoft YaHei",serif';
+    const m = ctx.measureText(text);
+    const padX = 6, h = 19;
+    let x = p.x + 10;
+    if(align === 'left') x = p.x - m.width - padX * 2 - 10;
+    if(align === 'center') x = p.x - m.width / 2 - padX;
+    const y = p.y - h / 2;
+    ctx.fillStyle = 'rgba(22,15,10,.72)';
+    ctx.strokeStyle = 'rgba(216,178,90,.25)';
+    ctx.lineWidth = 1;
+    roundRect(x, y, m.width + padX * 2, h, 4);
+    ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#eadcbe';
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'left';
+    ctx.fillText(text, x + padX, y + h / 2 + .5);
+  }
+  function roundRect(x, y, w, h, r){
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+  function leatherGrad(a, b){
+    const g = ctx.createLinearGradient(a.x, a.y, b.x, b.y);
+    g.addColorStop(0, '#3d2a1d');
+    g.addColorStop(.55, '#2a1c14');
+    g.addColorStop(1, '#1f1510');
+    return g;
+  }
+
+  function drawTorso(g){
+    const { P, neck, dir, perp } = g;
+    const widthAt = t => {
+      if(t < 0) return 58 + (-t) * 60;      // 裙摆
+      return 28 + 30 * Math.pow(1 - t, 1.1); // 颈→胯
+    };
+    const N = 22;
+    const left = [], right = [];
+    for(let i = 0; i <= N; i++){
+      const t = -0.14 + (1.14) * i / N;
+      const c = add(P, mul(dir, rig.torso.len * t));
+      const w = widthAt(t);
+      left.push(add(c, mul(perp, -w)));
+      right.push(add(c, mul(perp, w)));
+    }
+    ctx.beginPath();
+    left.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y));
+    for(let i = right.length - 1; i >= 0; i--) ctx.lineTo(right[i].x, right[i].y);
+    ctx.closePath();
+    const grad = ctx.createLinearGradient(P.x - 30, P.y, P.x + 40, neck.y);
+    grad.addColorStop(0, '#1f1510');
+    grad.addColorStop(.45, '#33231a');
+    grad.addColorStop(1, '#241811');
+    ctx.fillStyle = grad;
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(216,178,90,.30)';
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+
+    // 中缝
+    ctx.beginPath();
+    ctx.moveTo(add(P, mul(dir, rig.torso.len * .02)).x, add(P, mul(dir, rig.torso.len * .02)).y);
+    ctx.lineTo(add(neck, mul(dir, -6)).x, add(neck, mul(dir, -6)).y);
+    ctx.strokeStyle = 'rgba(216,178,90,.16)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+
+  function drawHead(g){
+    const { neck, dir, rot } = g;
+    const tilt = rad(rig.head.tilt);
+    const center = add(neck, mul(dir, rig.head.len * 0.58));
+    ctx.save();
+    ctx.translate(center.x, center.y);
+    ctx.rotate(rad(rot) + tilt);
+    // 头
+    const grd = ctx.createLinearGradient(-26, -30, 20, 30);
+    grd.addColorStop(0, '#3a2619');
+    grd.addColorStop(1, '#1d130e');
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 25, 31, 0, 0, Math.PI * 2);
+    ctx.fillStyle = grd;
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(216,178,90,.28)';
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+    // 发髻
+    ctx.beginPath();
+    ctx.arc(-8, -30, 9, 0, Math.PI * 2);
+    ctx.fillStyle = '#241811';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(216,178,90,.22)';
+    ctx.stroke();
+    // 鼻/脸轮廓的小凸起（朝右）
+    ctx.beginPath();
+    ctx.moveTo(23, -6);
+    ctx.quadraticCurveTo(32, 2, 23, 8);
+    ctx.strokeStyle = 'rgba(216,178,90,.32)';
+    ctx.stroke();
+    ctx.restore();
+
+    // 脖口插口
+    const sock = add(neck, mul(dir, 4));
+    ctx.save();
+    ctx.translate(sock.x, sock.y);
+    ctx.rotate(rad(rot));
+    ctx.beginPath();
+    roundRect(-11, -5, 22, 10, 4);
+    ctx.fillStyle = '#4a3323';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(216,178,90,.5)';
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawLimb(a, b, w1, w2, end){
+    // 两段式宽度：用两条叠线模拟锥形
+    capsule(a, b, (w1 + w2) / 2, leatherGrad(a, b));
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.strokeStyle = 'rgba(216,178,90,.13)';
+    ctx.lineWidth = Math.max(1, (w1 + w2) / 2 - 6);
+    ctx.stroke();
+    if(end === 'hand'){
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, 8, 0, Math.PI * 2);
+      ctx.fillStyle = '#2a1c14';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(216,178,90,.25)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }else if(end === 'foot'){
+      capsule(b, add(b, { x: 19, y: 1 }), 10, '#221711');
+      ctx.strokeStyle = 'rgba(216,178,90,.2)';
+      ctx.beginPath();
+      ctx.arc(b.x + 15, b.y + 2, 5, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
+
+  function drawLimits(g){
+    if(!rig.view.limits) return;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(168,69,47,.5)';
+    ctx.fillStyle = 'rgba(168,69,47,.08)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 4]);
+
+    const fan = (pivot, startDeg, maxDeg, r) => {
+      ctx.beginPath();
+      for(let a = 0; a <= maxDeg; a += 4){
+        const v = vec(startDeg + a);
+        const q = add(pivot, mul(v, r));
+        a ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y);
+      }
+      ctx.stroke();
+    };
+    fan(g.ER, g.shR, 150, 26);
+    fan(g.EL, g.shL, 150, 26);
+    fan(g.KR, g.hipRA, 140, 30);
+    fan(g.KL, g.hipLA, 140, 30);
+    ctx.restore();
+  }
+
+  const handles = [];
+
+  function addHandle(p, type, key, r){
+    handles.push({ p, type, key, r: r || 9 });
+  }
+
+  function draw(){
+    const g = geom();
+    ctx.clearRect(0, 0, W, H);
+
+    // 舞台灯光
+    const bg = ctx.createRadialGradient(W * .5, H * .18, 40, W * .5, H * .45, Math.max(W, H) * .82);
+    bg.addColorStop(0, '#3d2b1f');
+    bg.addColorStop(.55, '#241811');
+    bg.addColorStop(1, '#120d09');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, W, H);
+
+    // 编辑网格
+    ctx.strokeStyle = 'rgba(216,178,90,.055)';
+    ctx.lineWidth = 1;
+    for(let x = 0; x < W; x += 48){
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+    }
+    for(let y = 0; y < H; y += 48){
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+    }
+
+    // 视图缩放与屏幕坐标
+    viewK = viewScale();
+    const sP = scr(g.P), sS = scr(g.S), sNeck = scr(g.neck);
+    const sHL = scr(g.HL), sHR = scr(g.HR);
+    const sER = scr(g.ER), sWR = scr(g.WR);
+    const sEL = scr(g.EL), sWL = scr(g.WL);
+    const sKR = scr(g.KR), sAR = scr(g.AR);
+    const sKL = scr(g.KL), sAL = scr(g.AL);
+
+    // 舞台线（跟随脚底）
+    const floorY = Math.min(H * 0.96, Math.max(sAL.y, sAR.y) + 14);
+    ctx.beginPath();
+    ctx.moveTo(0, floorY);
+    ctx.lineTo(W, floorY);
+    ctx.strokeStyle = 'rgba(216,178,90,.22)';
+    ctx.setLineDash([7, 6]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // 地面投影
+    const cx = (sAL.x + sAR.x) / 2;
+    const rx = Math.max(46, Math.abs(sAR.x - sAL.x) / 2 + 40);
+    ctx.beginPath();
+    ctx.ellipse(cx, floorY - 2, rx, 11, 0, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(0,0,0,.28)';
+    ctx.fill();
+
+    // 皮偶本体统一缩放，保证完整入画
+    ctx.save();
+    ctx.translate(rig.root.x, rig.root.y);
+    ctx.scale(viewK, viewK);
+    ctx.translate(-rig.root.x, -rig.root.y);
+
+    // 限位扇形
+    drawLimits(g);
+
+    // 远侧手臂（单肩轴，只做 3px 视觉错位）
+    const off = mul(g.perp, -3);
+    if(rig.view.far){
+      drawLimb(add(g.S, off), add(g.EL, off), 22, 16, 'hand');
+      drawLimb(add(g.EL, off), add(g.WL, off), 16, 11, 'hand');
+    }
+    // 远侧腿
+    if(rig.view.far){
+      drawLimb(g.HL, g.KL, 30, 23, null);
+      drawLimb(g.KL, g.AL, 23, 14, 'foot');
+    }
+
+    // 躯干 / 头
+    drawTorso(g);
+    drawHead(g);
+
+    // 近侧腿
+    drawLimb(g.HR, g.KR, 32, 24, null);
+    drawLimb(g.KR, g.AR, 24, 15, 'foot');
+    // 近侧手臂
+    drawLimb(g.S, g.ER, 24, 17, 'hand');
+    drawLimb(g.ER, g.WR, 17, 11, 'hand');
+
+    // 骨骼线
+    ctx.beginPath();
+    const boneLines = [
+      [g.P, g.neck], [g.S, g.ER], [g.ER, g.WR],
+      [g.HR, g.KR], [g.KR, g.AR], [g.HL, g.KL], [g.KL, g.AL]
+    ];
+    if(rig.view.far){ boneLines.push([g.S, g.EL], [g.EL, g.WL]); }
+    boneLines.forEach(([a, b]) => { ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); });
+    ctx.strokeStyle = 'rgba(216,178,90,.30)';
+    ctx.lineWidth = 1.2;
+    ctx.setLineDash([4, 4]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // 头颈虚线
+    ctx.beginPath();
+    ctx.moveTo(g.neck.x, g.neck.y);
+    ctx.lineTo(add(g.neck, mul(g.dir, rig.head.len)).x, add(g.neck, mul(g.dir, rig.head.len)).y);
+    ctx.strokeStyle = 'rgba(216,178,90,.3)';
+    ctx.setLineDash([3, 4]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // 弧线：显示肩部同轴
+    ctx.beginPath();
+    ctx.arc(g.S.x, g.S.y, 18, rad(-160), rad(160));
+    ctx.strokeStyle = 'rgba(216,178,90,.35)';
+    ctx.setLineDash([2, 4]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.restore();
+
+    // 胯距标注（屏幕坐标，字号不随视图缩放）
+    ctx.beginPath();
+    ctx.moveTo(sHL.x, sHL.y + 24);
+    ctx.lineTo(sHR.x, sHR.y + 24);
+    ctx.strokeStyle = 'rgba(216,178,90,.45)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    label({ x: (sHL.x + sHR.x) / 2, y: (sHL.y + sHR.y) / 2 + 26 },
+          '双髋轴 · 胯距 ' + Math.round(dist(g.HL, g.HR)) + 'px', 'center');
+
+    // 骨眼
+    rivet(sP, 6, '#c79a3f');
+    rivet(sS, 9, '#e0b968', true);
+    rivet(sHL, 8, '#cf9f45');
+    rivet(sHR, 8, '#cf9f45');
+    rivet(sNeck, 6, '#b98b3c');
+    if(rig.view.far){
+      rivet(sEL, 7); rivet(sWL, 7);
+    }
+    rivet(sKL, 7); rivet(sAL, 6);
+    rivet(sER, 7); rivet(sWR, 7);
+    rivet(sKR, 7); rivet(sAR, 6);
+
+    // 标注（画布较小时只保留结构标注，避免文字互相压住）
+    const smallView = viewK < 0.78;
+    if(rig.view.labels){
+      label(sS, '肩锚点（单轴）', 'left');
+      label(sNeck, '头插口', 'left');
+      if(!smallView){
+        label(sHL, '左胯', 'left');
+        label(sHR, '右胯');
+      }
+      if(rig.view.lengths && !smallView){
+        label({ x: (sS.x + sER.x) / 2, y: (sS.y + sER.y) / 2 }, '上臂 ' + rig.bones.upper_arm);
+        label({ x: (sER.x + sWR.x) / 2, y: (sER.y + sWR.y) / 2 }, '前臂 ' + rig.bones.forearm);
+        label({ x: (sHR.x + sKR.x) / 2, y: (sHR.y + sKR.y) / 2 }, '大腿 ' + rig.bones.thigh, 'left');
+        label({ x: (sKR.x + sAR.x) / 2, y: (sKR.y + sAR.y) / 2 }, '小腿 ' + rig.bones.shin);
+      }
+    }
+
+    // 拖拽命中区
+    handles.length = 0;
+    addHandle(sP, 'root', 'root', 12);
+    addHandle(sS, 'anchor', 'shoulder', 14);
+    addHandle(sHL, 'anchor', 'left_hip', 13);
+    addHandle(sHR, 'anchor', 'right_hip', 13);
+    addHandle(sNeck, 'head', 'neck', 12);
+    addHandle(sER, 'joint', 'elbowR', 11);
+    addHandle(sWR, 'joint', 'wristR', 11);
+    addHandle(sEL, 'joint', 'elbowL', 11);
+    addHandle(sWL, 'joint', 'wristL', 11);
+    addHandle(sKR, 'joint', 'kneeR', 11);
+    addHandle(sAR, 'joint', 'ankleR', 10);
+    addHandle(sKL, 'joint', 'kneeL', 11);
+    addHandle(sAL, 'joint', 'ankleL', 10);
+
+    updateSummary(g);
+  }
+
+  // ---------- 交互 ----------
+  let drag = null;
+  const pointer = e => {
+    const r = cvs.getBoundingClientRect();
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
+  };
+  function pick(p){
+    let best = null, bestD = 1e9;
+    handles.forEach(h => {
+      if(h.type === 'joint' && (h.key === 'elbowL' || h.key === 'wristL') && !rig.view.far) return;
+      const d = dist(p, h.p);
+      if(d <= h.r + 6 && d < bestD){ best = h; bestD = d; }
+    });
+    return best;
+  }
+
+  cvs.addEventListener('pointerdown', e => {
+    const p = pointer(e);
+    const h = pick(p);
+    if(!h) return;
+    drag = { h, last: p };
+    cvs.setPointerCapture(e.pointerId);
+    cvs.style.cursor = 'grabbing';
+    e.preventDefault();
+  });
+
+  cvs.addEventListener('pointermove', e => {
+    const p = pointer(e);
+    if(!drag){
+      cvs.style.cursor = pick(p) ? 'grab' : 'default';
+      return;
+    }
+    const { h } = drag;
+    if(h.type === 'root'){
+      rig.root.x += p.x - drag.last.x;
+      rig.root.y += p.y - drag.last.y;
+      drag.last = p;
+    }else{
+      const g = geom();
+      const rp = rigPoint(p);
+      if(h.type === 'anchor'){
+        const rel = sub(rp, g.P);
+        const t = clamp(dot(rel, g.dir) / rig.torso.len, -0.06, 1.0);
+        const out = clamp(dot(rel, g.perp), -48, 48);
+        if(h.key === 'shoulder'){
+          rig.anchors.shoulder.t = clamp(t, 0.55, 0.98);
+          rig.anchors.shoulder.out = clamp(out, -8, 8);
+        }else if(h.key === 'left_hip'){
+          rig.anchors.left_hip.t = clamp(t, -0.05, 0.25);
+          rig.anchors.left_hip.out = clamp(out, -45, -4);
+        }else if(h.key === 'right_hip'){
+          rig.anchors.right_hip.t = clamp(t, -0.05, 0.25);
+          rig.anchors.right_hip.out = clamp(out, 4, 45);
+        }
+        syncUI();
+      }else if(h.type === 'head'){
+        const v = sub(rp, g.neck);
+        const ang = deg(Math.atan2(cross(g.dir, v), dot(g.dir, v)));
+        rig.head.tilt = clamp(ang, -10, 10);
+        syncUI();
+      }else if(h.type === 'joint'){
+        const target = vphi(sub(rp, jointOrigin(h.key, g)));
+        if(h.key === 'elbowR') rig.angles.shoulder_r = clamp(target - g.rot, -40, 155);
+        if(h.key === 'wristR') rig.angles.elbow_r = clamp(target - g.shR, 0, 150);
+        if(h.key === 'elbowL') rig.angles.shoulder_l = clamp(target - g.rot, -40, 155);
+        if(h.key === 'wristL') rig.angles.elbow_l = clamp(target - g.shL, 0, 150);
+        if(h.key === 'kneeR') rig.angles.hip_r = clamp(target - g.rot, -35, 130);
+        if(h.key === 'ankleR') rig.angles.knee_r = clamp(target - g.hipRA, 0, 140);
+        if(h.key === 'kneeL') rig.angles.hip_l = clamp(target - g.rot, -35, 130);
+        if(h.key === 'ankleL') rig.angles.knee_l = clamp(target - g.hipLA, 0, 140);
+        syncUI();
+      }
+    }
+    draw();
+  });
+
+  function jointOrigin(key, g){
+    if(key === 'elbowR' || key === 'wristR') return g.S;
+    if(key === 'kneeR' || key === 'ankleR') return g.HR;
+    if(key === 'elbowL' || key === 'wristL') return g.S;
+    return g.HL;
+  }
+
+  function endDrag(){
+    drag = null;
+    cvs.style.cursor = 'default';
+  }
+  cvs.addEventListener('pointerup', endDrag);
+  cvs.addEventListener('pointercancel', endDrag);
+
+  // ---------- 滑杆绑定 ----------
+  const bindings = [
+    ['torso_len', () => rig.torso.len, v => rig.torso.len = v, v => v + 'px'],
+    ['shoulder_t', () => rig.anchors.shoulder.t, v => rig.anchors.shoulder.t = v, v => Math.round(v * 100) + '%'],
+    ['shoulder_out', () => rig.anchors.shoulder.out, v => rig.anchors.shoulder.out = v, v => (v > 0 ? '+' : '') + v + 'px'],
+    ['hips_t', () => rig.anchors.left_hip.t, v => { rig.anchors.left_hip.t = v; rig.anchors.right_hip.t = v; }, v => Math.round(v * 100) + '%'],
+    ['hip_l', () => rig.anchors.left_hip.out, v => rig.anchors.left_hip.out = v, v => v + 'px'],
+    ['hip_r', () => rig.anchors.right_hip.out, v => rig.anchors.right_hip.out = v, v => '+' + v + 'px'],
+    ['upper_arm', () => rig.bones.upper_arm, v => rig.bones.upper_arm = v, v => v + 'px'],
+    ['forearm', () => rig.bones.forearm, v => rig.bones.forearm = v, v => v + 'px'],
+    ['thigh', () => rig.bones.thigh, v => rig.bones.thigh = v, v => v + 'px'],
+    ['shin', () => rig.bones.shin, v => rig.bones.shin = v, v => v + 'px'],
+    ['torso_rot', () => rig.torso.rot, v => rig.torso.rot = v, v => v + '°'],
+    ['head_tilt', () => rig.head.tilt, v => rig.head.tilt = v, v => v + '°'],
+    ['shoulder_r', () => rig.angles.shoulder_r, v => rig.angles.shoulder_r = v, v => v + '°'],
+    ['elbow_r', () => rig.angles.elbow_r, v => rig.angles.elbow_r = v, v => v + '°'],
+    ['shoulder_l', () => rig.angles.shoulder_l, v => rig.angles.shoulder_l = v, v => v + '°'],
+    ['elbow_l', () => rig.angles.elbow_l, v => rig.angles.elbow_l = v, v => v + '°'],
+    ['hip_r_ang', () => rig.angles.hip_r, v => rig.angles.hip_r = v, v => v + '°'],
+    ['knee_r', () => rig.angles.knee_r, v => rig.angles.knee_r = v, v => v + '°'],
+    ['hip_l_ang', () => rig.angles.hip_l, v => rig.angles.hip_l = v, v => v + '°'],
+    ['knee_l', () => rig.angles.knee_l, v => rig.angles.knee_l = v, v => v + '°']
+  ];
+
+  bindings.forEach(([id, get, set, fmt]) => {
+    const el = document.getElementById(id);
+    el.addEventListener('input', () => {
+      set(parseFloat(el.value));
+      syncUI();
+      draw();
+    });
+    el._get = get;
+    el._fmt = fmt;
+  });
+
+  function syncUI(){
+    bindings.forEach(([id]) => {
+      const el = document.getElementById(id);
+      const out = el.parentElement.querySelector('output');
+      const v = el._get();
+      if(document.activeElement !== el) el.value = v;
+      out.textContent = el._fmt(v);
+    });
+    document.getElementById('view_far').checked = rig.view.far;
+    document.getElementById('view_labels').checked = rig.view.labels;
+    document.getElementById('view_limits').checked = rig.view.limits;
+    document.getElementById('view_lengths').checked = rig.view.lengths;
+  }
+
+  [['view_far', 'far'], ['view_labels', 'labels'], ['view_limits', 'limits'], ['view_lengths', 'lengths']]
+    .forEach(([id, key]) => {
+      document.getElementById(id).addEventListener('change', e => {
+        rig.view[key] = e.target.checked;
+        draw();
+      });
+    });
+
+  function updateSummary(g){
+    const el = document.getElementById('summary');
+    el.innerHTML =
+      '<b>骨架</b>：肩点单轴（两臂同一点）；左右胯分开 ' + Math.round(dist(g.HL, g.HR)) + 'px。<br>' +
+      '<b>骨长</b>：上臂 ' + rig.bones.upper_arm + ' / 前臂 ' + rig.bones.forearm +
+      ' / 大腿 ' + rig.bones.thigh + ' / 小腿 ' + rig.bones.shin + ' px。<br>' +
+      '<b>当前</b>：躯干 ' + rig.torso.rot + '°，头 ' + rig.head.tilt +
+      '°，右臂 ' + rig.angles.shoulder_r + '/' + rig.angles.elbow_r +
+      '°，左臂 ' + rig.angles.shoulder_l + '/' + rig.angles.elbow_l +
+      '°，右腿 ' + rig.angles.hip_r + '/' + rig.angles.knee_r +
+      '°，左腿 ' + rig.angles.hip_l + '/' + rig.angles.knee_l + '°。';
+  }
+
+  // ---------- 预设 ----------
+  function applyPreset(name){
+    rig = defaults();
+    rig.root = { x: W * 0.5, y: H * 0.6 };
+    if(name === 'punch'){
+      rig.torso.rot = 8;
+      rig.angles.shoulder_r = 92; rig.angles.elbow_r = 8;
+      rig.angles.shoulder_l = -18; rig.angles.elbow_l = 40;
+      rig.angles.hip_r = 6; rig.angles.knee_r = 4;
+      rig.angles.hip_l = -6; rig.angles.knee_l = 8;
+    }else if(name === 'kick'){
+      rig.torso.rot = -12;
+      rig.angles.shoulder_r = 40; rig.angles.elbow_r = 70;
+      rig.angles.shoulder_l = 55; rig.angles.elbow_l = 25;
+      rig.angles.hip_r = 88; rig.angles.knee_r = 12;
+      rig.angles.hip_l = -8; rig.angles.knee_l = 6;
+    }
+    syncUI();
+    draw();
+  }
+  document.getElementById('btnIdle').addEventListener('click', () => applyPreset('idle'));
+  document.getElementById('btnPunch').addEventListener('click', () => applyPreset('punch'));
+  document.getElementById('btnKick').addEventListener('click', () => applyPreset('kick'));
+  document.getElementById('btnReset').addEventListener('click', () => {
+    applyPreset('idle');
+    toast('已恢复默认骨架');
+  });
+
+  // ---------- 导出 ----------
+  function exportRig(){
+    const data = {
+      note: '皮影骨骼原型导出：单肩轴 + 双髋轴；坐标为当前画布像素，' +
+            '躯干局部锚点用 t（0=骨盆，1=颈）与 out（横向像素）表示。',
+      canvas: [Math.round(W), Math.round(H)],
+      root: { x: Math.round(rig.root.x), y: Math.round(rig.root.y) },
+      torso: { length: rig.torso.len, rot: rig.torso.rot },
+      head: { length: rig.head.len, tilt: rig.head.tilt },
+      anchors: {
+        shoulder: { t: +rig.anchors.shoulder.t.toFixed(3), out: rig.anchors.shoulder.out },
+        left_hip: { t: +rig.anchors.left_hip.t.toFixed(3), out: rig.anchors.left_hip.out },
+        right_hip: { t: +rig.anchors.right_hip.t.toFixed(3), out: rig.anchors.right_hip.out }
+      },
+      bones: { ...rig.bones },
+      angles: { ...rig.angles },
+      limits: {
+        torso: [-25, 25], head: [-10, 10],
+        shoulder: [-40, 155], elbow: [0, 150],
+        hip: [-35, 130], knee: [0, 140]
+      }
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'rig.json';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    toast('已导出 rig.json');
+  }
+  document.getElementById('btnExport').addEventListener('click', exportRig);
+
+  // ---------- 本地保存（localStorage） ----------
+  const SAVE_KEY = 'shadow_rig_preview_v1';
+  const num = (v, fb) => (typeof v === 'number' && isFinite(v) ? v : fb);
+
+  function saveState(){
+    const data = {
+      version: 1,
+      savedAt: new Date().toISOString(),
+      rootFrac: { x: rig.root.x / Math.max(W, 1), y: rig.root.y / Math.max(H, 1) },
+      torso: { len: rig.torso.len, rot: rig.torso.rot },
+      head: { len: rig.head.len, tilt: rig.head.tilt },
+      anchors: {
+        shoulder: { t: rig.anchors.shoulder.t, out: rig.anchors.shoulder.out },
+        left_hip: { t: rig.anchors.left_hip.t, out: rig.anchors.left_hip.out },
+        right_hip: { t: rig.anchors.right_hip.t, out: rig.anchors.right_hip.out }
+      },
+      bones: { ...rig.bones },
+      angles: { ...rig.angles },
+      view: { ...rig.view }
+    };
+    try{
+      localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+      toast('已保存到本机浏览器');
+    }catch(err){
+      toast('保存失败：浏览器禁用了本地存储');
+    }
+  }
+
+  function loadState(){
+    let data = null;
+    try{
+      data = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
+    }catch(err){
+      return;
+    }
+    if(!data || data.version !== 1) return;
+
+    if(data.rootFrac){
+      rig.root.x = clamp(num(data.rootFrac.x, .5), 0, 1) * W;
+      rig.root.y = clamp(num(data.rootFrac.y, .6), 0, 1) * H;
+    }
+    if(data.torso){
+      rig.torso.len = clamp(num(data.torso.len, rig.torso.len), 150, 250);
+      rig.torso.rot = clamp(num(data.torso.rot, 0), -25, 25);
+    }
+    if(data.head){
+      rig.head.len = clamp(num(data.head.len, rig.head.len), 40, 80);
+      rig.head.tilt = clamp(num(data.head.tilt, 0), -10, 10);
+    }
+    if(data.anchors){
+      const a = data.anchors;
+      if(a.shoulder){
+        rig.anchors.shoulder.t = clamp(num(a.shoulder.t, .78), .55, .98);
+        rig.anchors.shoulder.out = clamp(num(a.shoulder.out, 0), -8, 8);
+      }
+      if(a.left_hip){
+        rig.anchors.left_hip.t = clamp(num(a.left_hip.t, .03), -.05, .25);
+        rig.anchors.left_hip.out = clamp(num(a.left_hip.out, -11), -45, -4);
+      }
+      if(a.right_hip){
+        rig.anchors.right_hip.t = clamp(num(a.right_hip.t, .03), -.05, .25);
+        rig.anchors.right_hip.out = clamp(num(a.right_hip.out, 11), 4, 45);
+      }
+    }
+    if(data.bones){
+      for(const key of Object.keys(rig.bones)){
+        rig.bones[key] = clamp(num(data.bones[key], rig.bones[key]), 40, 200);
+      }
+    }
+    if(data.angles){
+      const range = {
+        shoulder_r: [-40, 155], shoulder_l: [-40, 155],
+        elbow_r: [0, 150], elbow_l: [0, 150],
+        hip_r: [-35, 130], hip_l: [-35, 130],
+        knee_r: [0, 140], knee_l: [0, 140]
+      };
+      for(const key of Object.keys(rig.angles)){
+        const r = range[key] || [-180, 180];
+        rig.angles[key] = clamp(num(data.angles[key], rig.angles[key]), r[0], r[1]);
+      }
+    }
+    if(data.view){
+      for(const key of Object.keys(rig.view)) rig.view[key] = !!data.view[key];
+    }
+    syncUI();
+    draw();
+  }
+
+  document.getElementById('btnSave').addEventListener('click', saveState);
+
+  let toastTimer = null;
+  function toast(msg){
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.add('on');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('on'), 1600);
+  }
+
+  // ---------- 启动 ----------
+  syncUI();
+  resize();
+  loadState();
+})();
+</script>
+</body>
+</html>

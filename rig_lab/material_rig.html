@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>皮影素材拼装预览 · 真实 PNG</title>
+<style>
+  :root{
+    --paper:#f2e7d3;
+    --paper-2:#e9dbc2;
+    --ink:#33251a;
+    --ink-2:#6b5745;
+    --leather:#2b1d16;
+    --gold:#d8b25a;
+    --accent:#a8452f;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ height:100%; }
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:"Noto Serif SC","Songti SC","SimSun","Microsoft YaHei",serif;
+    overflow:hidden;
+  }
+  header{
+    height:62px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:14px;
+    padding:0 18px;
+    background:linear-gradient(180deg,#33231a,#2b1d16);
+    border-bottom:2px solid #1c120d;
+    color:#f3e7d2;
+    box-shadow:0 2px 10px rgba(0,0,0,.25);
+    position:relative;
+    z-index:3;
+  }
+  .title{ min-width:0; display:flex; align-items:baseline; gap:12px; }
+  .title h1{
+    margin:0;
+    font-size:18px;
+    letter-spacing:2px;
+    font-weight:600;
+    white-space:nowrap;
+  }
+  .title p{
+    margin:0;
+    font-size:12px;
+    color:#c9b28d;
+    letter-spacing:1px;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .actions{ display:flex; gap:8px; flex-shrink:0; }
+  button{
+    font-family:inherit;
+    font-size:13px;
+    color:#3c2a1d;
+    background:linear-gradient(180deg,#f7edda,#e2cfae);
+    border:1px solid #bda27b;
+    border-radius:7px;
+    padding:7px 13px;
+    cursor:pointer;
+    white-space:nowrap;
+    box-shadow:0 1px 0 rgba(255,255,255,.5) inset,0 2px 4px rgba(0,0,0,.18);
+    transition:transform .08s ease, filter .15s ease;
+  }
+  button:hover{ filter:brightness(1.05); }
+  button:active{ transform:translateY(1px); }
+  button.primary{
+    color:#fff6e6;
+    background:linear-gradient(180deg,#b9553c,#963c27);
+    border-color:#7d2f1d;
+  }
+  button.link{
+    background:transparent;
+    color:#e8d7b9;
+    border-color:#6d543d;
+    box-shadow:none;
+    text-decoration:none;
+  }
+  main{
+    height:calc(100% - 62px);
+    display:grid;
+    grid-template-columns:1fr 358px;
+  }
+  .stage-wrap{ position:relative; min-width:0; min-height:0; background:#120d09; }
+  canvas{ display:block; width:100%; height:100%; }
+  .loading{
+    position:absolute;
+    left:50%; top:50%;
+    transform:translate(-50%,-50%);
+    color:#d8b25a;
+    font-size:14px;
+    letter-spacing:2px;
+    background:rgba(18,13,9,.7);
+    border:1px solid rgba(216,178,90,.35);
+    border-radius:8px;
+    padding:10px 20px;
+    pointer-events:none;
+    display:none;
+  }
+  .loading.on{ display:block; }
+  .hud{
+    position:absolute;
+    left:16px; bottom:14px;
+    font-size:11px;
+    line-height:1.7;
+    color:#b6a184;
+    background:rgba(20,14,10,.55);
+    border:1px solid rgba(216,178,90,.22);
+    border-radius:7px;
+    padding:6px 10px;
+    pointer-events:none;
+    max-width:70%;
+  }
+  .hud b{ color:var(--gold); font-weight:600; }
+  aside{
+    background:linear-gradient(180deg,var(--paper),var(--paper-2));
+    border-left:1px solid #cbb693;
+    overflow-y:auto;
+    padding:12px 15px 28px;
+  }
+  aside::-webkit-scrollbar{ width:9px; }
+  aside::-webkit-scrollbar-thumb{ background:#c3ac87; border-radius:9px; }
+  .sec-title{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin:14px 0 8px;
+    padding-bottom:6px;
+    border-bottom:1px dashed #c9b391;
+  }
+  .sec-title:first-child{ margin-top:2px; }
+  .sec-title h2{ margin:0; font-size:13px; letter-spacing:1px; color:#5a3d29; }
+  .sec-title span{ font-size:11px; color:var(--ink-2); }
+  .chars{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:6px;
+  }
+  .chars button{ font-size:12px; padding:6px 4px; }
+  .chars button.on{
+    color:#fff6e6;
+    background:linear-gradient(180deg,#b9553c,#963c27);
+    border-color:#7d2f1d;
+  }
+  .row{
+    display:grid;
+    grid-template-columns:88px 1fr 46px;
+    align-items:center;
+    gap:8px;
+    padding:3px 0;
+  }
+  .row label{ font-size:12px; color:#4d3828; }
+  .row output{
+    font-size:11px;
+    text-align:right;
+    color:#7a4a2c;
+    font-variant-numeric:tabular-nums;
+  }
+  input[type=range]{ width:100%; accent-color:var(--accent); height:17px; }
+  .checks{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:4px 10px;
+    padding:2px 0;
+  }
+  .checks label{
+    display:flex;
+    align-items:center;
+    gap:6px;
+    font-size:12px;
+    color:#4d3828;
+    cursor:pointer;
+    user-select:none;
+  }
+  input[type=checkbox]{ accent-color:var(--accent); }
+  .btns{ display:grid; grid-template-columns:1fr 1fr; gap:7px; margin-top:4px; }
+  .btns button{ font-size:12px; padding:7px 4px; }
+  .btns button.wide{ grid-column:1 / -1; }
+  .note{
+    margin-top:10px;
+    font-size:11px;
+    line-height:1.75;
+    color:#6b5745;
+    background:rgba(255,250,240,.55);
+    border:1px solid #d9c7a8;
+    border-radius:7px;
+    padding:8px 10px;
+  }
+  .note code{ color:#8c3c28; font-family:ui-monospace,Consolas,monospace; }
+  .toast{
+    position:fixed;
+    left:50%; bottom:26px;
+    transform:translate(-50%,16px);
+    background:#2b1d16;
+    color:#f2e3c6;
+    font-size:13px;
+    padding:9px 18px;
+    border-radius:8px;
+    border:1px solid #6d543d;
+    opacity:0;
+    pointer-events:none;
+    transition:opacity .2s ease, transform .2s ease;
+    z-index:9;
+  }
+  .toast.on{ opacity:1; transform:translate(-50%,0); }
+  @media (max-width:980px){
+    main{ grid-template-columns:1fr; grid-template-rows:54vh 1fr; }
+    aside{ border-left:none; border-top:1px solid #cbb693; }
+    .title p{ display:none; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="title">
+    <h1>素材拼装预览</h1>
+    <p>直接读取项目里的 10 个部件 PNG 与 adjust.json</p>
+  </div>
+  <div class="actions">
+    <a class="link" href="index.html"><button class="link" type="button">返回目录</button></a>
+    <button id="btnReset">复位姿态</button>
+    <button id="btnShot">导出图片</button>
+    <button id="btnSave" class="primary">保存姿态</button>
+  </div>
+</header>
+
+<main>
+  <section class="stage-wrap" id="stageWrap">
+    <canvas id="stage"></canvas>
+    <div class="loading" id="loading">素材加载中…</div>
+    <div class="hud" id="hud"></div>
+  </section>
+
+  <aside>
+    <div class="sec-title"><h2>角色</h2><span>项目已启用素材</span></div>
+    <div class="chars" id="charList"></div>
+
+    <div class="sec-title"><h2>姿态</h2><span>0 = 原始待机</span></div>
+    <div class="row"><label>躯干旋转</label><input type="range" data-pose="torso" min="-30" max="30" step="0.5"><output></output></div>
+    <div class="row"><label>头俯仰</label><input type="range" data-pose="head" min="-25" max="25" step="0.5"><output></output></div>
+    <div class="row"><label>右肩</label><input type="range" data-pose="shR" min="-120" max="120" step="1"><output></output></div>
+    <div class="row"><label>右肘</label><input type="range" data-pose="elR" min="-150" max="30" step="1"><output></output></div>
+    <div class="row"><label>左肩</label><input type="range" data-pose="shL" min="-120" max="120" step="1"><output></output></div>
+    <div class="row"><label>左肘</label><input type="range" data-pose="elL" min="-150" max="30" step="1"><output></output></div>
+    <div class="row"><label>右髋</label><input type="range" data-pose="hipR" min="-90" max="90" step="1"><output></output></div>
+    <div class="row"><label>右膝</label><input type="range" data-pose="knR" min="-150" max="20" step="1"><output></output></div>
+    <div class="row"><label>左髋</label><input type="range" data-pose="hipL" min="-90" max="90" step="1"><output></output></div>
+    <div class="row"><label>左膝</label><input type="range" data-pose="knL" min="-150" max="20" step="1"><output></output></div>
+
+    <div class="sec-title"><h2>显示</h2><span>结构与朝向</span></div>
+    <div class="checks">
+      <label><input type="checkbox" id="optBones" checked>骨架叠加</label>
+      <label><input type="checkbox" id="optLabels" checked>关节标注</label>
+      <label><input type="checkbox" id="optMirror">镜像朝向</label>
+      <label><input type="checkbox" id="optParts" checked>部件边框</label>
+    </div>
+
+    <div class="sec-title"><h2>部件显隐</h2><span>排查错位用</span></div>
+    <div class="checks" id="partToggles"></div>
+
+    <div class="sec-title"><h2>导出</h2><span>可回填引擎</span></div>
+    <div class="btns">
+      <button id="btnPose">导出 pose.json</button>
+      <button id="btnClearSaved">清除已存姿态</button>
+    </div>
+
+    <div class="note">
+      看到的每一片皮子都是项目目录里的真实 PNG：位置 = 关节 + <code>offset</code>，角度 = <code>getAngle</code> + <code>rot</code>，图层按 <code>draw</code> 排序，与 <code>pygame_Alpha.render()</code> 同一套数学。滑杆只旋转关节，不改骨长。
+    </div>
+  </aside>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script src="materials.js"></script>
+<script>
+(function(){
+  "use strict";
+
+  const RIGS = window.MATERIAL_RIGS || {};
+  const SAVE_KEY = 'shadow_material_pose_v1';
+
+  const PART_LABEL = {
+    body: "身体", head: "头",
+    right_hip: "右大腿", right_knee: "右小腿",
+    left_hip: "左大腿", left_knee: "左小腿",
+    right_elbow: "右上臂", right_wrist: "右前臂",
+    left_elbow: "左上臂", left_wrist: "左前臂"
+  };
+
+  // 关节连线（骨架叠加用）
+  const BONES = [
+    ["upper_neck", "pelvis"],
+    ["head_top", "upper_neck"],
+    ["right_shoulder", "right_elbow"],
+    ["right_elbow", "right_wrist"],
+    ["left_shoulder", "left_elbow"],
+    ["left_elbow", "left_wrist"],
+    ["right_hip", "right_knee"],
+    ["right_knee", "right_ankle"],
+    ["left_hip", "left_knee"],
+    ["left_knee", "left_ankle"],
+    ["right_shoulder", "left_shoulder"],
+    ["right_hip", "left_hip"]
+  ];
+  const JOINT_LABEL = {
+    head_top: "头", upper_neck: "颈", pelvis: "盆",
+    right_shoulder: "肩", right_elbow: "肘", right_wrist: "腕",
+    left_shoulder: "肩", left_elbow: "肘", left_wrist: "腕",
+    right_hip: "胯", right_knee: "膝", right_ankle: "踝",
+    left_hip: "胯", left_knee: "膝", left_ankle: "踝"
+  };
+
+  const canvas = document.getElementById('stage');
+  const wrap = document.getElementById('stageWrap');
+  const ctx = canvas.getContext('2d');
+  const loadingEl = document.getElementById('loading');
+  const hudEl = document.getElementById('hud');
+  const toastEl = document.getElementById('toast');
+
+  const state = {
+    key: Object.keys(RIGS)[0] || '',
+    pose: freshPose(),
+    showBones: true,
+    showLabels: true,
+    showParts: true,
+    mirror: false,
+    hidden: {},
+    images: {},     // "folder/part" -> Image
+    saved: loadSaved()
+  };
+
+  let view = { k: 1, cx: 0, cy: 0, bcx: 0, bcy: 0 };
+  let ready = false;
+
+  // ---------- 数学 ----------
+  const rad = d => d * Math.PI / 180;
+  function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
+
+  // 与 pygame_Alpha.get_angle 完全一致
+  function getAngle(x1, y1, x2, y2){
+    const dx = Math.abs(x1 - x2);
+    const dy = Math.abs(y1 - y2);
+    if (x1 === x2) return y1 > y2 ? 180.0 : 0.0;
+    if (y1 === y2) return 0.0;
+    const angle = dy ? Math.atan(dx / dy) * 180 / Math.PI : 0.0;
+    let result;
+    if (x1 < x2) result = (y1 > y2) ? -(180 - angle) : -angle;
+    else result = (y1 > y2) ? (180 - angle) : angle;
+    return result < 0 ? result + 360.0 : result;
+  }
+
+  function rotateAround(j, centerKey, keys, deg){
+    if (!deg) return;
+    const c = j[centerKey];
+    const r = rad(deg);
+    const cs = Math.cos(r), sn = Math.sin(r);
+    for (const k of keys){
+      const p = j[k];
+      const dx = p.x - c.x, dy = p.y - c.y;
+      p.x = c.x + dx * cs - dy * sn;
+      p.y = c.y + dx * sn + dy * cs;
+    }
+  }
+
+  function freshPose(){
+    return { torso:0, head:0, shR:0, elR:0, shL:0, elL:0, hipR:0, knR:0, hipL:0, knL:0 };
+  }
+
+  // ---------- 保存 ----------
+  function loadSaved(){
+    try{ return JSON.parse(localStorage.getItem(SAVE_KEY) || '{}') || {}; }
+    catch(e){ return {}; }
+  }
+  function persist(){
+    try{ localStorage.setItem(SAVE_KEY, JSON.stringify(state.saved)); }
+    catch(e){ toast('浏览器存储不可用'); }
+  }
+
+  // ---------- 素材加载 ----------
+  function loadImages(rig){
+    const tasks = Object.keys(rig.parts).map(part => {
+      const id = rig.folder + '/' + part;
+      const cached = state.images[id];
+      if (cached && cached.complete && cached.naturalWidth > 0) return Promise.resolve(cached);
+      return new Promise(resolve => {
+        const img = cached || new Image();
+        state.images[id] = img;
+        img.onload = () => resolve(img);
+        img.onerror = () => { img.__failed = true; resolve(img); };
+        if (!cached) img.src = rig.parts[part].img;
+      });
+    });
+    return Promise.all(tasks);
+  }
+
+  // ---------- FK 骨架 ----------
+  function computeJoints(rig){
+    const j = {};
+    for (const k in rig.joints) j[k] = { x: rig.joints[k][0], y: rig.joints[k][1] };
+    const P = state.pose;
+    rotateAround(j, 'right_shoulder', ['right_elbow', 'right_wrist'], P.shR);
+    rotateAround(j, 'right_elbow', ['right_wrist'], P.elR);
+    rotateAround(j, 'left_shoulder', ['left_elbow', 'left_wrist'], P.shL);
+    rotateAround(j, 'left_elbow', ['left_wrist'], P.elL);
+    rotateAround(j, 'right_hip', ['right_knee', 'right_ankle'], P.hipR);
+    rotateAround(j, 'right_knee', ['right_ankle'], P.knR);
+    rotateAround(j, 'left_hip', ['left_knee', 'left_ankle'], P.hipL);
+    rotateAround(j, 'left_knee', ['left_ankle'], P.knL);
+    rotateAround(j, 'upper_neck', ['head_top'], P.head);
+    rotateAround(j, 'pelvis', Object.keys(j), P.torso);
+    return j;
+  }
+
+  // 与 pygame_Alpha.render 相同：位置 = p1 + offset，角度 = getAngle + rot
+  function partList(rig, j){
+    const out = [];
+    for (const part in rig.parts){
+      if (state.hidden[part]) continue;
+      const def = rig.parts[part];
+      if (!def || !def.joints) continue;
+      const p1 = j[def.joints[0]];
+      const p2 = j[def.joints[1]];
+      if (!p1 || !p2) continue;
+      out.push({
+        part, def,
+        pos: { x: p1.x + def.offset[0], y: p1.y + def.offset[1] },
+        ang: getAngle(p1.x, p1.y, p2.x, p2.y) + (def.rot || 0)
+      });
+    }
+    out.sort((a, b) => (a.def.draw || 0) - (b.def.draw || 0));
+    return out;
+  }
+
+  function boundsOf(list, j, rig){
+    let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
+    const push = (x, y) => {
+      if (x < minx) minx = x;
+      if (y < miny) miny = y;
+      if (x > maxx) maxx = x;
+      if (y > maxy) maxy = y;
+    };
+    for (const t of list){
+      const img = state.images[rig.folder + '/' + t.part];
+      const w = (t.def.size && t.def.size[0]) || (img && img.naturalWidth) || 1;
+      const h = (t.def.size && t.def.size[1]) || (img && img.naturalHeight) || 1;
+      const px = t.def.pivot[0], py = t.def.pivot[1];
+      const r = rad(t.ang), cs = Math.cos(r), sn = Math.sin(r);
+      for (const c of [[0,0],[w,0],[0,h],[w,h]]){
+        const lx = c[0] - px, ly = c[1] - py;
+        push(t.pos.x + lx * cs - ly * sn, t.pos.y + lx * sn + ly * cs);
+      }
+    }
+    if (state.showBones || state.showLabels){
+      for (const k in j) push(j[k].x, j[k].y);
+    }
+    if (!isFinite(minx)){ minx = -100; miny = -300; maxx = 100; maxy = 100; }
+    return { x: minx, y: miny, w: Math.max(1, maxx - minx), h: Math.max(1, maxy - miny) };
+  }
+
+  // ---------- 绘制 ----------
+  function resizeCanvas(){
+    const dpr = window.devicePixelRatio || 1;
+    const w = wrap.clientWidth, h = wrap.clientHeight;
+    if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)){
+      canvas.width = Math.round(w * dpr);
+      canvas.height = Math.round(h * dpr);
+    }
+    return { w, h, dpr };
+  }
+
+  function drawBackground(w, h){
+    const g = ctx.createLinearGradient(0, 0, 0, h);
+    g.addColorStop(0, '#1c1410');
+    g.addColorStop(1, '#0c0906');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, w, h);
+    const r = Math.max(w, h) * 0.55;
+    const rg = ctx.createRadialGradient(w * 0.5, h * 0.44, 10, w * 0.5, h * 0.44, r);
+    rg.addColorStop(0, 'rgba(216,178,90,.10)');
+    rg.addColorStop(1, 'rgba(216,178,90,0)');
+    ctx.fillStyle = rg;
+    ctx.fillRect(0, 0, w, h);
+  }
+
+  function drawPart(t, img){
+    if (!img || !img.complete || !img.naturalWidth) return;
+    const def = t.def;
+    const px = def.pivot[0], py = def.pivot[1];
+    const w = img.naturalWidth;
+    ctx.save();
+    ctx.translate(t.pos.x, t.pos.y);
+    ctx.rotate(rad(t.ang));
+    if (def.mirror){
+      ctx.scale(-1, 1);
+      ctx.drawImage(img, px - w + 1, -py);
+    } else {
+      ctx.drawImage(img, -px, -py);
+    }
+    ctx.restore();
+  }
+
+  function drawPartOutline(t, img){
+    if (!img || !img.naturalWidth) return;
+    const def = t.def;
+    const px = def.pivot[0], py = def.pivot[1];
+    const w = img.naturalWidth, h = img.naturalHeight;
+    ctx.save();
+    ctx.translate(t.pos.x, t.pos.y);
+    ctx.rotate(rad(t.ang));
+    if (def.mirror) ctx.scale(-1, 1);
+    ctx.strokeStyle = 'rgba(216,178,90,.22)';
+    ctx.lineWidth = 1 / view.k;
+    ctx.strokeRect(-px, -py, w, h);
+    ctx.restore();
+  }
+
+  function drawSkeleton(j){
+    ctx.save();
+    ctx.lineWidth = 1.6 / view.k;
+    ctx.strokeStyle = 'rgba(216,178,90,.85)';
+    ctx.beginPath();
+    for (const [a, b] of BONES){
+      if (!j[a] || !j[b]) continue;
+      ctx.moveTo(j[a].x, j[a].y);
+      ctx.lineTo(j[b].x, j[b].y);
+    }
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(24,17,12,.9)';
+    ctx.strokeStyle = '#d8b25a';
+    ctx.lineWidth = 1.4 / view.k;
+    for (const k in j){
+      ctx.beginPath();
+      ctx.arc(j[k].x, j[k].y, 3.4 / view.k, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function toScreen(p){
+    const { k, cx, cy, bcx, bcy } = view;
+    const sx = state.mirror ? -1 : 1;
+    return { x: cx + sx * k * (p.x - bcx), y: cy + k * (p.y - bcy) };
+  }
+
+  function drawLabels(j){
+    ctx.save();
+    ctx.font = '11px "Microsoft YaHei",sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (const k in j){
+      const p = toScreen(j[k]);
+      const text = JOINT_LABEL[k] || '';
+      if (!text) continue;
+      const w = ctx.measureText(text).width + 8;
+      ctx.fillStyle = 'rgba(20,14,10,.72)';
+      ctx.fillRect(p.x - w / 2, p.y - 8, w, 16);
+      ctx.fillStyle = '#e6cf9c';
+      ctx.fillText(text, p.x, p.y + 0.5);
+    }
+    ctx.restore();
+  }
+
+  function draw(){
+    if (!ready) return;
+    const rig = RIGS[state.key];
+    if (!rig) return;
+
+    const { w, h, dpr } = resizeCanvas();
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    drawBackground(w, h);
+
+    const j = computeJoints(rig);
+    const list = partList(rig, j);
+    const bb = boundsOf(list, j, rig);
+    const pad = 1.14;
+    const k = Math.min(w / (bb.w * pad), h / (bb.h * pad));
+    view = { k, cx: w / 2, cy: h / 2, bcx: bb.x + bb.w / 2, bcy: bb.y + bb.h / 2 };
+
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+
+    ctx.save();
+    ctx.translate(view.cx, view.cy);
+    ctx.scale(state.mirror ? -k : k, k);
+    ctx.translate(-view.bcx, -view.bcy);
+
+    for (const t of list){
+      const img = state.images[rig.folder + '/' + t.part];
+      drawPart(t, img);
+    }
+    if (state.showParts){
+      for (const t of list){
+        const img = state.images[rig.folder + '/' + t.part];
+        drawPartOutline(t, img);
+      }
+    }
+    if (state.showBones) drawSkeleton(j);
+    ctx.restore();
+
+    if (state.showLabels) drawLabels(j);
+
+    hudEl.innerHTML = '角色：<b>' + rig.name + '</b>（' + rig.folder + '） · 部件 <b>' + list.length +
+      '/10</b> · 视图缩放 <b>' + k.toFixed(2) + '×</b>';
+  }
+
+  // ---------- UI ----------
+  function toast(msg){
+    toastEl.textContent = msg;
+    toastEl.classList.add('on');
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => toastEl.classList.remove('on'), 1600);
+  }
+
+  function buildCharList(){
+    const box = document.getElementById('charList');
+    box.innerHTML = '';
+    for (const key in RIGS){
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = RIGS[key].name;
+      b.dataset.key = key;
+      b.addEventListener('click', () => switchCharacter(key));
+      box.appendChild(b);
+    }
+    syncCharList();
+  }
+  function syncCharList(){
+    document.querySelectorAll('#charList button').forEach(b => {
+      b.classList.toggle('on', b.dataset.key === state.key);
+    });
+  }
+
+  function buildPartToggles(){
+    const box = document.getElementById('partToggles');
+    box.innerHTML = '';
+    const order = ['body','head','right_elbow','left_elbow','right_hip','left_hip',
+                   'right_wrist','left_wrist','right_knee','left_knee'];
+    for (const p of order){
+      const label = document.createElement('label');
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = !state.hidden[p];
+      cb.addEventListener('change', () => {
+        if (cb.checked) delete state.hidden[p];
+        else state.hidden[p] = true;
+        draw();
+      });
+      label.appendChild(cb);
+      label.appendChild(document.createTextNode(PART_LABEL[p] || p));
+      box.appendChild(label);
+    }
+  }
+  function syncPartToggles(){
+    const cbs = document.querySelectorAll('#partToggles input[type=checkbox]');
+    cbs.forEach((cb, i) => {
+      const order = ['body','head','right_elbow','left_elbow','right_hip','left_hip',
+                     'right_wrist','left_wrist','right_knee','left_knee'];
+      const p = order[i];
+      cb.checked = !state.hidden[p];
+    });
+  }
+
+  function syncSliders(){
+    document.querySelectorAll('input[data-pose]').forEach(input => {
+      const key = input.dataset.pose;
+      input.value = state.pose[key] || 0;
+      const out = input.parentElement.querySelector('output');
+      if (out) out.textContent = (Number(state.pose[key]) || 0) + '°';
+    });
+  }
+
+  function applySavedPose(key){
+    const saved = state.saved[key];
+    state.pose = freshPose();
+    if (saved){
+      for (const k in state.pose){
+        if (typeof saved[k] === 'number') state.pose[k] = saved[k];
+      }
+    }
+  }
+
+  async function switchCharacter(key){
+    if (!RIGS[key]) return;
+    state.key = key;
+    applySavedPose(key);
+    state.hidden = {};
+    syncCharList();
+    syncSliders();
+    syncPartToggles();
+    loadingEl.classList.add('on');
+    ready = false;
+    await loadImages(RIGS[key]);
+    ready = true;
+    loadingEl.classList.remove('on');
+    draw();
+  }
+
+  function exportPose(){
+    const rig = RIGS[state.key];
+    const j = computeJoints(rig);
+    const list = partList(rig, j);
+    const data = {
+      character: rig.folder,
+      pose: { ...state.pose },
+      parts: list.map(t => ({
+        name: t.part,
+        x: +t.pos.x.toFixed(2),
+        y: +t.pos.y.toFixed(2),
+        angle: +t.ang.toFixed(2)
+      }))
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'pose_' + rig.folder + '.json';
+    a.click();
+    URL.revokeObjectURL(a.href);
+    toast('已导出 pose.json');
+  }
+
+  function exportImage(){
+    draw();
+    let url;
+    try{
+      url = canvas.toDataURL('image/png');
+    }catch(e){
+      toast('直接双击打开时浏览器禁止导出，请用本地服务器打开');
+      return;
+    }
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'material_' + RIGS[state.key].folder + '.png';
+    a.click();
+    toast('已导出图片');
+  }
+
+  // ---------- 绑定 ----------
+  document.querySelectorAll('input[data-pose]').forEach(input => {
+    input.addEventListener('input', () => {
+      const key = input.dataset.pose;
+      state.pose[key] = Number(input.value);
+      const out = input.parentElement.querySelector('output');
+      if (out) out.textContent = input.value + '°';
+      draw();
+    });
+  });
+
+  document.getElementById('optBones').addEventListener('change', e => {
+    state.showBones = e.target.checked; draw();
+  });
+  document.getElementById('optLabels').addEventListener('change', e => {
+    state.showLabels = e.target.checked; draw();
+  });
+  document.getElementById('optMirror').addEventListener('change', e => {
+    state.mirror = e.target.checked; draw();
+  });
+  document.getElementById('optParts').addEventListener('change', e => {
+    state.showParts = e.target.checked; draw();
+  });
+
+  document.getElementById('btnReset').addEventListener('click', () => {
+    state.pose = freshPose();
+    syncSliders();
+    draw();
+    toast('已回到原始待机姿态');
+  });
+
+  document.getElementById('btnSave').addEventListener('click', () => {
+    state.saved[state.key] = { ...state.pose };
+    persist();
+    toast('已保存「' + RIGS[state.key].name + '」的姿态');
+  });
+
+  document.getElementById('btnPose').addEventListener('click', exportPose);
+  document.getElementById('btnShot').addEventListener('click', exportImage);
+  document.getElementById('btnClearSaved').addEventListener('click', () => {
+    delete state.saved[state.key];
+    persist();
+    toast('已清除该角色的保存');
+  });
+
+  window.addEventListener('resize', () => draw());
+
+  // ---------- 启动 ----------
+  buildCharList();
+  buildPartToggles();
+
+  (async function init(){
+    if (!Object.keys(RIGS).length){
+      hudEl.textContent = '未找到 materials.js，请确认文件与 HTML 在同一目录。';
+      return;
+    }
+    // 默认优先悟空
+    if (RIGS['xinwukong_material']) state.key = 'xinwukong_material';
+    applySavedPose(state.key);
+    syncCharList();
+    syncSliders();
+    loadingEl.classList.add('on');
+    await loadImages(RIGS[state.key]);
+    ready = true;
+    loadingEl.classList.remove('on');
+    draw();
+  })();
+})();
+</script>
+</body>
+</html>

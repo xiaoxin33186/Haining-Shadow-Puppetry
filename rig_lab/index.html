@@ -1,0 +1,1439 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>皮影骨骼验证台</title>
+<style>
+  :root{
+    --bg:#f6f6f4;
+    --panel:#fff;
+    --line:#d9d9d4;
+    --ink:#1b1b1b;
+    --ink-2:#6a6a66;
+    --ink-3:#9a9a94;
+    --stage:#111;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ height:100%; }
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font:13px/1.6 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;
+    overflow:hidden;
+  }
+  header{
+    height:46px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    padding:0 14px;
+    background:var(--panel);
+    border-bottom:1px solid var(--line);
+  }
+  header h1{
+    margin:0;
+    font-size:14px;
+    font-weight:600;
+    letter-spacing:1px;
+    white-space:nowrap;
+  }
+  header .sub{
+    font-size:11px;
+    color:var(--ink-3);
+    margin-left:10px;
+    letter-spacing:0;
+  }
+  .acts{ display:flex; gap:6px; flex-shrink:0; }
+  button{
+    font:12px/1 inherit;
+    font-family:inherit;
+    color:var(--ink);
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:3px;
+    padding:7px 11px;
+    cursor:pointer;
+    white-space:nowrap;
+  }
+  button:hover{ border-color:#aaa; }
+  button.solid{ background:var(--ink); border-color:var(--ink); color:#fff; }
+  main{
+    height:calc(100% - 46px);
+    display:grid;
+    grid-template-columns:1fr 308px;
+  }
+  .stage-wrap{ position:relative; min-width:0; min-height:0; background:var(--stage); }
+  canvas{ display:block; width:100%; height:100%; }
+  .hud{
+    position:absolute;
+    left:12px; bottom:10px;
+    font-size:11px;
+    line-height:1.6;
+    color:#b9b9b2;
+    background:rgba(0,0,0,.5);
+    border:1px solid #2c2c2c;
+    border-radius:3px;
+    padding:5px 8px;
+    pointer-events:none;
+    max-width:92%;
+  }
+  .hud b{ color:#fff; font-weight:500; }
+  .hud .warn{ color:#ffd0d0; }
+  aside{
+    background:var(--panel);
+    border-left:1px solid var(--line);
+    overflow-y:auto;
+    padding:10px 12px 26px;
+  }
+  .sec{ margin-bottom:12px; }
+  .sec > h2{
+    margin:0 0 6px;
+    padding-bottom:5px;
+    border-bottom:1px solid var(--line);
+    font-size:11px;
+    font-weight:600;
+    letter-spacing:1px;
+    color:var(--ink-2);
+  }
+  .seg{ display:grid; grid-template-columns:1fr 1fr; gap:4px; }
+  .seg button.on{ background:var(--ink); border-color:var(--ink); color:#fff; }
+  .chars{ display:grid; grid-template-columns:1fr 1fr; gap:4px; }
+  .chars button{ padding:6px 2px; }
+  .chars button.on{ background:var(--ink); border-color:var(--ink); color:#fff; }
+  .row{
+    display:grid;
+    grid-template-columns:68px 1fr 40px;
+    align-items:center;
+    gap:6px;
+    padding:1px 0;
+  }
+  .row label{ font-size:11px; color:var(--ink-2); }
+  .row output{
+    font-size:10px;
+    text-align:right;
+    color:var(--ink-3);
+    font-variant-numeric:tabular-nums;
+  }
+  input[type=range]{ width:100%; height:16px; accent-color:var(--ink); }
+  .checks{ display:grid; grid-template-columns:1fr 1fr; gap:2px 8px; }
+  .checks label{
+    display:flex; align-items:center; gap:5px;
+    font-size:11px; color:var(--ink-2); cursor:pointer; user-select:none;
+  }
+  input[type=checkbox]{ accent-color:var(--ink); }
+  .row select{
+    width:100%; height:22px;
+    border:1px solid var(--line); background:#fff; color:var(--ink);
+    font-size:11px; font-family:inherit; padding:0 2px;
+  }
+  .btns{ display:grid; grid-template-columns:1fr 1fr; gap:4px; margin-top:4px; }
+  details{ border-top:1px solid var(--line); padding-top:6px; margin-top:2px; }
+  summary{
+    font-size:11px; font-weight:600; letter-spacing:1px; color:var(--ink-2);
+    cursor:pointer; list-style:none; margin-bottom:4px;
+  }
+  summary::before{ content:"+ "; }
+  details[open] summary::before{ content:"− "; }
+  .note{
+    font-size:10.5px;
+    line-height:1.7;
+    color:var(--ink-3);
+    border-top:1px solid var(--line);
+    padding-top:8px;
+    margin-top:4px;
+  }
+  code{ font-family:ui-monospace,Consolas,monospace; color:var(--ink-2); }
+  .toast{
+    position:fixed; left:50%; bottom:22px;
+    transform:translate(-50%,10px);
+    background:var(--ink); color:#fff;
+    font-size:12px; padding:7px 14px; border-radius:3px;
+    opacity:0; pointer-events:none;
+    transition:opacity .15s ease, transform .15s ease;
+    z-index:9;
+  }
+  .toast.on{ opacity:1; transform:translate(-50%,0); }
+  .num{
+    width:76px; background:#181818; border:1px solid #3a3a3a; color:#eee;
+    padding:3px 6px; border-radius:3px; font:inherit; font-size:12px;
+  }
+  .num:focus{ outline:none; border-color:#777; }
+  .cap{ font-size:11px; color:#8a8a8a; margin:10px 0 4px; }
+  @media (max-width:820px){
+    main{ grid-template-columns:1fr; grid-template-rows:52vh 1fr; }
+    aside{ border-left:none; border-top:1px solid var(--line); }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>皮影骨骼验证台<span class="sub">单肩轴 · 双髋轴 · 素材按骨眼绑定</span></h1>
+  <div class="acts">
+    <button id="btnSave">保存</button>
+    <button id="btnReset">复位</button>
+    <button id="btnRest" class="solid">导出 rest.json</button>
+  </div>
+</header>
+
+<main>
+  <section class="stage-wrap" id="stageWrap">
+    <canvas id="stage"></canvas>
+    <div class="hud" id="hud"></div>
+  </section>
+
+  <aside>
+    <div class="sec">
+      <h2>角色</h2>
+      <div class="chars" id="charList"></div>
+    </div>
+
+    <div class="sec">
+      <h2>视图</h2>
+      <div class="seg">
+        <button data-mode="material" class="on">素材</button>
+        <button data-mode="skeleton">骨架</button>
+      </div>
+    </div>
+
+    <div class="sec">
+      <h2>动作</h2>
+      <div class="row"><label>选择</label><select id="actSel"></select><output></output></div>
+      <div class="row"><label>帧</label><input type="range" id="actFrame" min="0" max="0" value="0" step="1"><output id="actFrameOut">0</output></div>
+      <div class="btns">
+        <button id="btnPlay" type="button">播放</button>
+        <button id="btnStopAct" type="button">回到首帧</button>
+      </div>
+    </div>
+
+    <div class="sec">
+      <h2>姿态（12 个受控量）</h2>
+      <div class="row"><label>躯干</label><input type="range" data-pose="torso" min="-25" max="25" step="0.5"><output></output></div>
+      <div class="row"><label>头</label><input type="range" data-pose="head" min="-10" max="10" step="0.5"><output></output></div>
+      <div class="row"><label>右肩</label><input type="range" data-pose="shR" min="-40" max="155" step="1"><output></output></div>
+      <div class="row"><label>右肘</label><input type="range" data-pose="elR" min="0" max="150" step="1"><output></output></div>
+      <div class="row"><label>左肩</label><input type="range" data-pose="shL" min="-40" max="155" step="1"><output></output></div>
+      <div class="row"><label>左肘</label><input type="range" data-pose="elL" min="0" max="150" step="1"><output></output></div>
+      <div class="row"><label>右髋</label><input type="range" data-pose="hipR" min="-35" max="130" step="1"><output></output></div>
+      <div class="row"><label>右膝</label><input type="range" data-pose="knR" min="0" max="140" step="1"><output></output></div>
+      <div class="row"><label>左髋</label><input type="range" data-pose="hipL" min="-35" max="130" step="1"><output></output></div>
+      <div class="row"><label>左膝</label><input type="range" data-pose="knL" min="0" max="140" step="1"><output></output></div>
+    </div>
+
+    <div class="sec">
+      <details>
+        <summary>标定（拖动=移动，Shift+拖动=旋转）</summary>
+        <div class="row"><label>微调部件</label><select id="offPart"></select><output></output></div>
+        <div class="row"><label>X</label><input type="range" data-off="x" min="-400" max="400" step="1"><output></output></div>
+        <div class="row"><label>Y</label><input type="range" data-off="y" min="-400" max="400" step="1"><output></output></div>
+        <div class="row"><label>缩放</label><input type="range" data-scale min="0.4" max="2.5" step="0.01"><output></output></div>
+        <div class="row"><label>旋转</label><input type="range" data-rot min="-180" max="180" step="0.5"><output></output></div>
+        <div class="row"><label>骨眼</label><button id="btnPickPivot">点取</button><output style="min-width:90px">选中后点素材上的孔</output></div>
+        <div class="row"><label>贴合</label><button id="btnAutoFit">自动贴合</button><output style="min-width:90px">按骨长缩放各部件</output></div>
+        <div class="cap">标准骨架（所有角色共用，改这里全部角色一起变）</div>
+        <div class="row"><label>躯干长</label><input class="num" type="number" data-stdtorso step="0.1" min="10"></div>
+        <div class="row"><label>上臂</label><input class="num" type="number" data-stdlen="upperR" step="0.1" min="10"></div>
+        <div class="row"><label>前臂</label><input class="num" type="number" data-stdlen="foreR" step="0.1" min="10"></div>
+        <div class="row"><label>大腿</label><input class="num" type="number" data-stdlen="thighR" step="0.1" min="10"></div>
+        <div class="row"><label>小腿</label><input class="num" type="number" data-stdlen="shinR" step="0.1" min="10"></div>
+        <div class="row"><label>肩 X</label><input class="num" type="number" data-stdpt="shx" step="0.1"></div>
+        <div class="row"><label>肩 Y</label><input class="num" type="number" data-stdpt="shy" step="0.1"></div>
+        <div class="row"><label>左胯 X</label><input class="num" type="number" data-stdpt="hlx" step="0.1"></div>
+        <div class="row"><label>右胯 X</label><input class="num" type="number" data-stdpt="hrx" step="0.1"></div>
+        <div class="row"><label>左胯 Y</label><input class="num" type="number" data-stdpt="hly" step="0.1"></div>
+        <div class="row"><label>右胯 Y</label><input class="num" type="number" data-stdpt="hry" step="0.1"></div>
+        <div class="row"><label></label><button id="btnStdReset">恢复默认骨架</button></div>
+      </details>
+    </div>
+
+    <div class="sec">
+      <h2>显示</h2>
+      <div class="checks">
+        <label><input type="checkbox" id="optBones" checked>骨架叠加</label>
+        <label><input type="checkbox" id="optHoles">骨眼</label>
+        <label><input type="checkbox" id="optNames">关节名</label>
+        <label><input type="checkbox" id="optOld">旧肩位置</label>
+        <label><input type="checkbox" id="optMirror">整体镜像</label>
+      </div>
+    </div>
+
+    <div class="note">
+      素材模式下每片皮子的骨眼直接钉在骨段端点上，位置不再依赖旧 offset，因此任意角度都不会分离。标定值可按素材铆钉微调，再导出 rest.json 给主程序用。
+      <br><br>快捷键：数字 1~0 选部件 · 方向键微调 1px（Shift 10px）· Q/E 旋转 1°（Shift 5°）· D 大字校准姿势 · Shift+拖动旋转 · 拖动移动
+      <br><br>骨眼：点“标定 → 骨眼 → 点取”，再点素材上的铆钉孔，该孔就会成为这块皮子的枢轴（整块图随之移动，钉在关节上）。
+    </div>
+  </aside>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script src="rest.js"></script>
+<script src="actions.js"></script>
+<script>
+(function(){
+  "use strict";
+
+  const REST = window.REST_RIGS || {};
+  const SAVE_KEY = 'shadow_rig_lab_v3';
+  const STD_KEY = 'shadow_rig_lab_std';
+  const BONE_ORDER = ['upperR','foreR','upperL','foreL','thighR','shinR','thighL','shinL'];
+  const CHILD = {
+    upperR:'elbowR', foreR:'wristR', upperL:'elbowL', foreL:'wristL',
+    thighR:'kneeR', shinR:'ankleR', thighL:'kneeL', shinL:'ankleL'
+  };
+  const SCALE_KEY = {
+    upperR:'upR', foreR:'foreR', upperL:'upL', foreL:'foreL',
+    thighR:'thighR', shinR:'shinR', thighL:'thighL', shinL:'shinL'
+  };
+  const JOINT_LABEL = {
+    headEye:'头', neck:'颈', pelvis:'盆', shoulder:'肩',
+    elbowR:'肘', wristR:'腕', elbowL:'肘', wristL:'腕',
+    hipR:'胯', kneeR:'膝', ankleR:'踝', hipL:'胯', kneeL:'膝', ankleL:'踝'
+  };
+
+  const canvas = document.getElementById('stage');
+  const wrap = document.getElementById('stageWrap');
+  const ctx = canvas.getContext('2d');
+  const hudEl = document.getElementById('hud');
+  const toastEl = document.getElementById('toast');
+
+  const state = {
+    key: Object.keys(REST)[0] || '',
+    mode: 'material',
+    pose: blankPose(),
+    calib: blankCalib(),
+    showBones: true,
+    showHoles: false,
+    std: loadStd(),
+    showNames: false,
+    showOld: false,
+    mirror: false,
+    saved: loadSaved(),
+    images: {},
+    act: { name:'', frames:[], fps:30, i:0, playing:false, raf:0, last:0 },
+    partOff: {},
+    partScale: {},
+    partRot: {},
+    partPivot: {},
+    pickPivot: false
+  };
+  let view = { k: 1, cx: 0, cy: 0, bcx: 0, bcy: 0 };
+  let dragging = null;
+  let ready = false;
+
+  // 标准骨架：6 个角色共用同一套骨长 / 骨段方向 / 肩点 / 胯点
+  // 各角色只保留美术适配（axisOffset 补偿），骨架数值不再逐角色不同
+  function rigOf(rest){
+    if (!rest) return rest;
+    const st = state.std;
+    const out = Object.assign({}, rest, {
+      neck: st.torso.slice(),
+      phiTorso: st.phiTorso,
+      shoulder: st.shoulder.slice(),
+      hips: { left: st.hips.left.slice(), right: st.hips.right.slice() },
+      parts: Object.assign({}, rest.parts, {
+        head: Object.assign({}, rest.parts.head, { eyeOffset: st.head.slice() })
+      })
+    });
+    const bones = {};
+    for (const bn of BONE_ORDER){
+      const b = rest.bones[bn], s = st.bones[bn];
+      bones[bn] = Object.assign({}, b, { len: s.len, phi: s.phi });
+    }
+    out.bones = bones;
+    return out;
+  }
+
+  const rad = d => d * Math.PI / 180;
+
+  function blankPose(){
+    return { torso:0, head:0, shR:0, elR:0, shL:0, elL:0, hipR:0, knR:0, hipL:0, knL:0, rx:0, ry:0 };
+  }
+  function blankCalib(){
+    return { upR:1, foreR:1, thighR:1, shinR:1, upL:1, foreL:1, thighL:1, shinL:1,
+             shDx:0, shDy:0, hipL:0, hipR:0 };
+  }
+  function loadSaved(){
+    try{ return JSON.parse(localStorage.getItem(SAVE_KEY) || '{}') || {}; }catch(e){ return {}; }
+  }
+
+  function defaultStd(){
+    const r = REST[Object.keys(REST)[0]];
+    const bones = {};
+    for (const bn of BONE_ORDER){
+      bones[bn] = { len: Math.round(r.bones[bn].len * 10) / 10, phi: r.bones[bn].phi };
+    }
+    return {
+      bones,
+      torso: r.neck.slice(),
+      phiTorso: r.phiTorso,
+      head: r.parts.head.eyeOffset.slice(),
+      shoulder: r.shoulder.slice(),
+      hips: { left: r.hips.left.slice(), right: r.hips.right.slice() }
+    };
+  }
+
+  function loadStd(){
+    const base = defaultStd();
+    let s = null;
+    try{ s = JSON.parse(localStorage.getItem(STD_KEY) || 'null'); }catch(e){}
+    if (!s) return base;
+    for (const bn of BONE_ORDER){
+      const v = s.bones && s.bones[bn];
+      if (v && typeof v.len === 'number' && v.len > 0) base.bones[bn].len = v.len;
+      if (v && typeof v.phi === 'number') base.bones[bn].phi = v.phi;
+    }
+    if (Array.isArray(s.torso) && s.torso.length === 2) base.torso = s.torso.slice();
+    if (typeof s.phiTorso === 'number') base.phiTorso = s.phiTorso;
+    if (Array.isArray(s.head) && s.head.length === 2) base.head = s.head.slice();
+    if (Array.isArray(s.shoulder) && s.shoulder.length === 2) base.shoulder = s.shoulder.slice();
+    if (s.hips && Array.isArray(s.hips.left) && s.hips.left.length === 2) base.hips.left = s.hips.left.slice();
+    if (s.hips && Array.isArray(s.hips.right) && s.hips.right.length === 2) base.hips.right = s.hips.right.slice();
+    return base;
+  }
+
+  function persistStd(){
+    try{ localStorage.setItem(STD_KEY, JSON.stringify(state.std)); }catch(e){}
+  }
+
+  function syncStd(){
+    document.querySelectorAll('input[data-stdlen]').forEach(inp => {
+      const v = state.std.bones[inp.dataset.stdlen];
+      if (v) inp.value = Math.round(v.len * 10) / 10;
+    });
+    const map = {
+      shx: state.std.shoulder[0], shy: state.std.shoulder[1],
+      hlx: state.std.hips.left[0], hly: state.std.hips.left[1],
+      hrx: state.std.hips.right[0], hry: state.std.hips.right[1]
+    };
+    document.querySelectorAll('input[data-stdpt]').forEach(inp => {
+      const v = map[inp.dataset.stdpt];
+      if (typeof v === 'number') inp.value = Math.round(v * 10) / 10;
+    });
+    const ti = document.querySelector('input[data-stdtorso]');
+    if (ti) ti.value = Math.round(Math.hypot(state.std.torso[0], state.std.torso[1]) * 10) / 10;
+  }
+  function persist(){
+    try{ localStorage.setItem(SAVE_KEY, JSON.stringify(state.saved)); }catch(e){ toast('浏览器存储不可用'); }
+  }
+  function toast(msg){
+    toastEl.textContent = msg;
+    toastEl.classList.add('on');
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => toastEl.classList.remove('on'), 1500);
+  }
+
+  // 把向量按 φ 增加 d 度旋转（φ = atan2(x, y)，0 向下，+90 朝右）
+  function rotPhi(v, d){
+    if (!d) return [v[0], v[1]];
+    const r = rad(d), c = Math.cos(r), s = Math.sin(r);
+    return [v[0] * c + v[1] * s, -v[0] * s + v[1] * c];
+  }
+  function add(a, b){ return [a[0] + b[0], a[1] + b[1]]; }
+  function dir(phi){ return [Math.sin(rad(phi)), Math.cos(rad(phi))]; }
+
+  // ---------- 新骨架 FK ----------
+  function build(rest, pose, calib){
+    const j = { pelvis:[0, 0] };
+    j.neck = rotPhi(rest.neck, pose.torso);
+    j.shoulder = rotPhi(rest.shoulder, pose.torso);
+    j.hipL = rotPhi(rest.hips.left, pose.torso);
+    j.hipR = rotPhi(rest.hips.right, pose.torso);
+    j.headEye = add(j.neck, rotPhi(rest.parts.head.eyeOffset, pose.torso));
+
+    const delta = {
+      upperR: pose.shR,
+      foreR: pose.shR + pose.elR,
+      upperL: pose.shL,
+      foreL: pose.shL + pose.elL,
+      thighR: pose.hipR,
+      shinR: pose.hipR + pose.knR * rest.hinge.kneeR,
+      thighL: pose.hipL,
+      shinL: pose.hipL + pose.knL * rest.hinge.kneeL
+    };
+    const angles = {};
+    for (const bn of BONE_ORDER){
+      const b = rest.bones[bn];
+      const phi = b.phi + pose.torso + delta[bn];
+      const len = b.len;
+      j[CHILD[bn]] = add(j[b.base], [Math.sin(rad(phi)) * len, Math.cos(rad(phi)) * len]);
+      angles[bn] = -phi + b.axisOffset;
+    }
+    const phiTorso = rest.phiTorso + pose.torso;
+    angles.body = -phiTorso + rest.parts.body.axisOffset;
+    angles.head = -phiTorso + rest.parts.head.axisOffset - pose.head;
+    const rx = pose.rx || 0, ry = pose.ry || 0;
+    if (rx || ry) for (const k in j) j[k] = [j[k][0] + rx, j[k][1] + ry];
+    return { j, angles };
+  }
+
+  function scaleOf(part){
+    const s = state.partScale[part];
+    return (typeof s === 'number' && s > 0) ? s : 1;
+  }
+  function rotOf(part){
+    const r = state.partRot[part];
+    return (typeof r === 'number') ? r : 0;
+  }
+  function pivotOf(part, def){
+    const p = state.partPivot[part];
+    return (Array.isArray(p) && p.length === 2) ? p : def.pivot;
+  }
+
+  function partPos(rest, j, part){    const o = state.partOff[part] || [0, 0];
+    let p;
+    if (part === 'body') p = j.neck;
+    else if (part === 'head') p = j.headEye;
+    else p = j[rest.bones[rest.parts[part].bone].base];
+    return [p[0] + o[0], p[1] + o[1]];
+  }
+  function partAngle(rig, part){
+    if (part === 'body' || part === 'head') return rig.angles[part];
+    return rig.angles[rest_bone_of(part)];
+  }
+  function rest_bone_of(part){
+    return REST[state.key].parts[part].bone;
+  }
+
+  function visibleParts(rest){
+    return Object.keys(rest.parts)
+      .map(p => ({ part:p, def:rest.parts[p] }))
+      .sort((a, b) => a.def.draw - b.def.draw);
+  }
+
+  // ---------- 素材 ----------
+  function loadImages(rest){
+    return Promise.all(Object.keys(rest.parts).map(part => {
+      const id = rest.folder + '/' + part;
+      const cached = state.images[id];
+      if (cached && cached.complete && cached.naturalWidth) return Promise.resolve(cached);
+      return new Promise(res => {
+        const img = cached || new Image();
+        state.images[id] = img;
+        img.onload = () => res(img);
+        img.onerror = () => res(img);
+        if (!cached) img.src = rest.parts[part].img;
+      });
+    }));
+  }
+
+  // ---------- 绘制 ----------
+  function resize(){
+    const dpr = window.devicePixelRatio || 1;
+    const w = wrap.clientWidth, h = wrap.clientHeight;
+    if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)){
+      canvas.width = Math.round(w * dpr);
+      canvas.height = Math.round(h * dpr);
+    }
+    return { w, h, dpr };
+  }
+
+  function boundsOf(rest, rig){
+    let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
+    const push = (x, y) => {
+      if (x < minx) minx = x;
+      if (y < miny) miny = y;
+      if (x > maxx) maxx = x;
+      if (y > maxy) maxy = y;
+    };
+    for (const { part, def } of visibleParts(rest)){
+      const img = state.images[rest.folder + '/' + part];
+      const w = def.size[0], h = def.size[1];
+      const pv = pivotOf(part, def);
+      const px = pv[0], py = pv[1];
+      const pos = partPos(rest, rig.j, part);
+      const ang = partAngle(rig, part);
+      const r = rad(ang), cs = Math.cos(r), sn = Math.sin(r);
+      const s = scaleOf(part);
+      for (const c of [[0,0],[w,0],[0,h],[w,h]]){
+        const lx = (c[0] - px) * s, ly = (c[1] - py) * s;
+        push(pos[0] + lx * cs - ly * sn, pos[1] + lx * sn + ly * cs);
+      }
+    }
+    for (const k in rig.j) push(rig.j[k][0], rig.j[k][1]);
+    if (!isFinite(minx)){ minx = -100; miny = -300; maxx = 100; maxy = 100; }
+    return { x:minx, y:miny, w:Math.max(1, maxx - minx), h:Math.max(1, maxy - miny) };
+  }
+
+  function drawMaterial(rest, rig, list){
+    for (const { part, def } of list){
+      const img = state.images[rest.folder + '/' + part];
+      if (!img || !img.complete || !img.naturalWidth) continue;
+      const pos = partPos(rest, rig.j, part);
+      const ang = partAngle(rig, part);
+      const pv = pivotOf(part, def);
+      const px = pv[0], py = pv[1];
+      ctx.save();
+      ctx.translate(pos[0], pos[1]);
+      ctx.rotate(rad(ang + rotOf(part)));
+      const s = scaleOf(part);
+      if (s !== 1) ctx.scale(s, s);
+      if (def.mirror){
+        ctx.scale(-1, 1);
+        ctx.drawImage(img, px - img.naturalWidth + 1, -py);
+      } else {
+        ctx.drawImage(img, -px, -py);
+      }
+      ctx.restore();
+    }
+  }
+
+  function drawPartRects(rest, rig, list){
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,255,255,.13)';
+    ctx.setLineDash([3 / view.k, 3 / view.k]);
+    ctx.lineWidth = 1 / view.k;
+    for (const { part, def } of list){
+      const pos = partPos(rest, rig.j, part);
+      const ang = partAngle(rig, part);
+      ctx.save();
+      ctx.translate(pos[0], pos[1]);
+      ctx.rotate(rad(ang + rotOf(part)));
+      const s = scaleOf(part);
+      if (s !== 1) ctx.scale(s, s);
+      if (def.mirror) ctx.scale(-1, 1);
+      const pv = pivotOf(part, def);
+      ctx.strokeRect(-pv[0], -pv[1], def.size[0], def.size[1]);
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+
+  function seg(a, b){
+    ctx.moveTo(a[0], a[1]);
+    ctx.lineTo(b[0], b[1]);
+  }
+
+  function drawSkeleton(rest, rig){
+    const j = rig.j;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,255,255,.85)';
+    ctx.lineWidth = 1.4 / view.k;
+    ctx.beginPath();
+    seg(j.neck, j.pelvis);
+    seg(j.neck, j.headEye);
+    seg(j.shoulder, j.elbowR); seg(j.elbowR, j.wristR);
+    seg(j.shoulder, j.elbowL); seg(j.elbowL, j.wristL);
+    seg(j.hipR, j.kneeR); seg(j.kneeR, j.ankleR);
+    seg(j.hipL, j.kneeL); seg(j.kneeL, j.ankleL);
+    seg(j.hipL, j.hipR);
+    ctx.stroke();
+
+    if (state.showOld){
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255,255,255,.3)';
+      ctx.setLineDash([2 / view.k, 4 / view.k]);
+      ctx.lineWidth = 1 / view.k;
+      ctx.beginPath();
+      const oldR = rotPhi([rest.shoulderEyes.right[0], rest.shoulderEyes.right[1]], state.pose.torso);
+      const oldL = rotPhi([rest.shoulderEyes.left[0], rest.shoulderEyes.left[1]], state.pose.torso);
+      ctx.moveTo(oldR[0], oldR[1]); ctx.lineTo(j.shoulder[0], j.shoulder[1]);
+      ctx.moveTo(oldL[0], oldL[1]); ctx.lineTo(j.shoulder[0], j.shoulder[1]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = 'rgba(255,255,255,.35)';
+      for (const p of [oldR, oldL]){
+        ctx.beginPath(); ctx.arc(p[0], p[1], 2.6 / view.k, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    ctx.fillStyle = '#111';
+    ctx.strokeStyle = 'rgba(255,255,255,.9)';
+    ctx.lineWidth = 1.2 / view.k;
+    for (const k in j){
+      // 旧肩位置单独画，不画主关节
+      if (k === 'shoulderEyes') continue;
+      ctx.beginPath();
+      ctx.arc(j[k][0], j[k][1], 3.1 / view.k, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function toScreen(p){
+    const { k, cx, cy, bcx, bcy } = view;
+    const sx = state.mirror ? -1 : 1;
+    return { x: cx + sx * k * (p[0] - bcx), y: cy + k * (p[1] - bcy) };
+  }
+
+  function drawNames(rest, rig){
+    ctx.save();
+    ctx.font = '11px "Microsoft YaHei",sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (const k in rig.j){
+      const text = JOINT_LABEL[k];
+      if (!text) continue;
+      const p = toScreen(rig.j[k]);
+      const w = ctx.measureText(text).width + 6;
+      ctx.fillStyle = 'rgba(0,0,0,.72)';
+      ctx.fillRect(p.x - w / 2, p.y - 7, w, 14);
+      ctx.fillStyle = '#ddd';
+      ctx.fillText(text, p.x, p.y + 0.5);
+    }
+    ctx.restore();
+  }
+
+  function draw(){
+    if (!ready) return;
+    const rest = rigOf(REST[state.key]);
+    if (!rest) return;
+
+    const { w, h, dpr } = resize();
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = '#111';
+    ctx.fillRect(0, 0, w, h);
+
+    const rig = build(rest, state.pose, state.calib);
+    const list = visibleParts(rest);
+    const bb = boundsOf(rest, rig);
+    if (!dragging){
+      const pad = 1.1;
+      const fit = Math.min(w / (bb.w * pad), h / (bb.h * pad));
+      view = { k: fit, cx: w / 2, cy: h / 2, bcx: bb.x + bb.w / 2, bcy: bb.y + bb.h / 2 };
+    }
+    const k = view.k;
+
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+
+    ctx.save();
+    ctx.translate(view.cx, view.cy);
+    ctx.scale(state.mirror ? -k : k, k);
+    ctx.translate(-view.bcx, -view.bcy);
+
+    if (state.mode === 'material'){
+      drawMaterial(rest, rig, list);
+      if (state.showBones) drawSkeleton(rest, rig);
+    } else {
+      drawPartRects(rest, rig, list);
+      drawSkeleton(rest, rig);
+    }
+    if (state.showHoles) drawHoles(rest, rig, list);
+    ctx.restore();
+
+    if (state.showNames) drawNames(rest, rig);
+
+    const b = rest.bones;
+    hudEl.innerHTML =
+      '<b>' + rest.name + '</b> · ' + (state.mode === 'material' ? '素材' : '骨架') +
+      ' · 标准骨架' +
+      ' · 骨眼偏差 <b>0.00px</b> · 部件 <b>' + list.length + '/10</b><br>' +
+      '骨长：上臂 ' + b.upperR.len.toFixed(0) +
+      ' / 前臂 ' + b.foreR.len.toFixed(0) +
+      ' / 大腿 ' + b.thighR.len.toFixed(0) +
+      ' / 小腿 ' + b.shinR.len.toFixed(0) +
+      '　视图 ' + k.toFixed(2) + '×';
+  }
+
+  // ---------- 动作播放 ----------
+  function partJoints(rest, part){
+    if (part === 'body') return ['neck', 'pelvis'];
+    if (part === 'head') return ['headEye', 'neck'];
+    const b = rest.parts[part].bone;
+    return [rest.bones[b].base, CHILD[b]];
+  }
+
+  function drawHoles(rest, rig, list){
+    const k = view.k || 1;
+    const selEl = document.getElementById('offPart');
+    const sel = selEl ? selEl.value : '';
+    ctx.save();
+    ctx.font = (11 / k) + 'px system-ui, sans-serif';
+    ctx.textBaseline = 'bottom';
+
+    // 选中部件的两个连接关节 + 连线
+    if (sel){
+      const js = partJoints(rest, sel);
+      const a = rig.j[js[0]], b = rig.j[js[1]];
+      if (a && b){
+        ctx.beginPath();
+        ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]);
+        ctx.strokeStyle = 'rgba(255,255,255,.4)';
+        ctx.lineWidth = 1 / k;
+        ctx.stroke();
+      }
+      for (const jn of js){
+        const p = rig.j[jn];
+        if (!p) continue;
+        ctx.beginPath();
+        ctx.arc(p[0], p[1], 4 / k, 0, Math.PI * 2);
+        ctx.fillStyle = '#fff';
+        ctx.fill();
+        ctx.fillText(JOINT_LABEL[jn] || jn, p[0] + 6 / k, p[1] - 5 / k);
+      }
+    }
+
+    // 每块部件的枢轴骨眼
+    for (const { part } of list){
+      const p = partPos(rest, rig.j, part);
+      const on = part === sel;
+      ctx.beginPath();
+      ctx.arc(p[0], p[1], (on ? 4.5 : 3) / k, 0, Math.PI * 2);
+      ctx.fillStyle = '#000';
+      ctx.fill();
+      ctx.lineWidth = (on ? 2 : 1.2) / k;
+      ctx.strokeStyle = on ? '#fff' : 'rgba(255,255,255,.75)';
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(p[0] - 7 / k, p[1]); ctx.lineTo(p[0] + 7 / k, p[1]);
+      ctx.moveTo(p[0], p[1] - 7 / k); ctx.lineTo(p[0], p[1] + 7 / k);
+      ctx.strokeStyle = 'rgba(255,255,255,.35)';
+      ctx.lineWidth = 1 / k;
+      ctx.stroke();
+      if (on){
+        ctx.fillStyle = '#fff';
+        ctx.fillText(part, p[0] + 8 / k, p[1] - 6 / k);
+      }
+    }
+    ctx.restore();
+  }
+  const ACT_KEYS = window.ACTION_KEYS || ['torso','head','shR','elR','shL','elL','hipR','knR','hipL','knL'];
+  const ACTIONS = window.ACTIONS || {};
+
+  function poseFromRow(row){
+    const p = blankPose();
+    for (let k = 0; k < ACT_KEYS.length; k++) p[ACT_KEYS[k]] = row[k];
+    p.rx = row[10] || 0;
+    p.ry = row[11] || 0;
+    return p;
+  }
+
+  function showFrame(){
+    const a = state.act;
+    const fr = document.getElementById('actFrame');
+    if (fr){ fr.max = Math.max(0, a.frames.length - 1); fr.value = a.i; }
+    const out = document.getElementById('actFrameOut');
+    if (out) out.textContent = a.i + ' / ' + Math.max(0, a.frames.length - 1);
+  }
+
+  function applyFrame(i){
+    const a = state.act;
+    if (!a.frames.length) return;
+    a.i = Math.max(0, Math.min(a.frames.length - 1, i | 0));
+    state.pose = poseFromRow(a.frames[a.i]);
+    showFrame();
+    draw();
+  }
+
+  function loadAction(name){
+    const d = ACTIONS[name];
+    if (!d) return;
+    stopPlay();
+    state.act.name = name;
+    state.act.frames = d.frames;
+    state.act.fps = d.fps || 30;
+    state.act.i = 0;
+    applyFrame(0);
+  }
+
+  function stopPlay(){
+    const a = state.act;
+    a.playing = false;
+    if (a.raf) cancelAnimationFrame(a.raf);
+    a.raf = 0; a.last = 0;
+    const b = document.getElementById('btnPlay');
+    if (b) b.textContent = '播放';
+  }
+
+  function tick(now){
+    const a = state.act;
+    if (!a.playing) return;
+    if (!a.last) a.last = now;
+    const spf = 1000 / (a.fps || 30);
+    const n = Math.floor((now - a.last) / spf);
+    if (n > 0 && a.frames.length){
+      a.last += n * spf;
+      a.i = (a.i + n) % a.frames.length;
+      state.pose = poseFromRow(a.frames[a.i]);
+      showFrame();
+      draw();
+    }
+    a.raf = requestAnimationFrame(tick);
+  }
+
+  function togglePlay(){
+    const a = state.act;
+    if (!a.frames.length) return;
+    if (a.playing){ stopPlay(); return; }
+    a.playing = true; a.last = 0;
+    document.getElementById('btnPlay').textContent = '暂停';
+    a.raf = requestAnimationFrame(tick);
+  }
+
+  // ---------- 部件微调 ----------
+  function offOf(part){ return state.partOff[part] || [0, 0]; }
+  function syncOff(){
+    const sel = document.getElementById('offPart');
+    if (!sel) return;
+    const o = offOf(sel.value);
+    document.querySelectorAll('input[data-off]').forEach(inp => {
+      const v = inp.dataset.off === 'x' ? o[0] : o[1];
+      inp.value = v;
+      const out = inp.parentElement.querySelector('output');
+      if (out) out.textContent = v + 'px';
+    });
+    const si = document.querySelector('input[data-scale]');
+    if (si){
+      const sc = scaleOf(sel.value);
+      si.value = sc;
+      const out = si.parentElement.querySelector('output');
+      if (out) out.textContent = sc.toFixed(2) + '×';
+    }
+    const ri = document.querySelector('input[data-rot]');
+    if (ri){
+      const rr = rotOf(sel.value);
+      ri.value = rr;
+      const out = ri.parentElement.querySelector('output');
+      if (out) out.textContent = rr.toFixed(1) + '°';
+    }
+  }
+
+  // ---------- 画布直接拖动部件 ----------
+  function clientToWorld(e){
+    const r = canvas.getBoundingClientRect();
+    const mx = e.clientX - r.left, my = e.clientY - r.top;
+    const kx = state.mirror ? -view.k : view.k;
+    return [view.bcx + (mx - view.cx) / kx, view.bcy + (my - view.cy) / view.k];
+  }
+
+  function pickPart(wx, wy){
+    const rest = rigOf(REST[state.key]);
+    if (!rest) return null;
+    const rig = build(rest, state.pose, state.calib);
+    const list = visibleParts(rest);
+    for (let i = list.length - 1; i >= 0; i--){
+      const part = list[i].part, def = list[i].def;
+      const pos = partPos(rest, rig.j, part);
+      const s = scaleOf(part);
+      const r = rad(partAngle(rig, part) + rotOf(part));
+      const cs = Math.cos(r), sn = Math.sin(r);
+      const dx = wx - pos[0], dy = wy - pos[1];
+      const lx = (dx * cs + dy * sn) / s;
+      const ly = (-dx * sn + dy * cs) / s;
+      const pv = pivotOf(part, def);
+      const ix = lx + pv[0], iy = ly + pv[1];
+      if (ix >= 0 && iy >= 0 && ix <= def.size[0] && iy <= def.size[1]) return part;
+    }
+    return null;
+  }
+
+  function screenAngle(e, part){
+    const rest = rigOf(REST[state.key]);
+    const rig = build(rest, state.pose, state.calib);
+    const pos = partPos(rest, rig.j, part);
+    const kx = state.mirror ? -view.k : view.k;
+    const px = view.cx + (pos[0] - view.bcx) * kx;
+    const py = view.cy + (pos[1] - view.bcy) * view.k;
+    const r = canvas.getBoundingClientRect();
+    return Math.atan2(e.clientY - r.top - py, e.clientX - r.left - px) * 180 / Math.PI;
+  }
+
+  function pickPivotAt(wx, wy){
+    const rest = rigOf(REST[state.key]);
+    if (!rest) return;
+    const rig = build(rest, state.pose, state.calib);
+    const list = visibleParts(rest);
+    for (let i = list.length - 1; i >= 0; i--){
+      const part = list[i].part, def = list[i].def;
+      const pos = partPos(rest, rig.j, part);
+      const s = scaleOf(part);
+      const r = rad(partAngle(rig, part) + rotOf(part));
+      const cs = Math.cos(r), sn = Math.sin(r);
+      const dx = wx - pos[0], dy = wy - pos[1];
+      const lx = (dx * cs + dy * sn) / s;
+      const ly = (-dx * sn + dy * cs) / s;
+      const pv = pivotOf(part, def);
+      const ix = lx + pv[0], iy = ly + pv[1];
+      if (ix < 0 || iy < 0 || ix > def.size[0] || iy > def.size[1]) continue;
+      state.partPivot[part] = [Math.round(ix * 10) / 10, Math.round(iy * 10) / 10];
+      const sel = document.getElementById('offPart');
+      if (sel){ sel.value = part; syncOff(); }
+      draw();
+      toast('骨眼已设为 ' + part + ' 的 (' + Math.round(ix) + ', ' + Math.round(iy) + ')');
+      return;
+    }
+    toast('这里没有部件，请点在素材上');
+  }
+
+  canvas.addEventListener('pointerdown', e => {
+    if (!ready) return;
+    const p = clientToWorld(e);
+    if (state.pickPivot){
+      pickPivotAt(p[0], p[1]);
+      setPickPivot(false);
+      e.preventDefault();
+      return;
+    }
+    const part = pickPart(p[0], p[1]);
+    if (!part) return;
+    stopPlay();
+    dragging = e.shiftKey
+      ? { part, mode: 'rot', lastAng: screenAngle(e, part) }
+      : { part, mode: 'move', last: p };
+    try { canvas.setPointerCapture(e.pointerId); } catch(_) {}
+    canvas.style.cursor = e.shiftKey ? 'crosshair' : 'grabbing';
+    const sel = document.getElementById('offPart');
+    if (sel){ sel.value = part; syncOff(); }
+    e.preventDefault();
+  });
+
+  canvas.addEventListener('pointermove', e => {
+    if (state.pickPivot){ canvas.style.cursor = 'crosshair'; return; }
+    const p = clientToWorld(e);
+    if (!dragging){
+      const hit = pickPart(p[0], p[1]);
+      canvas.style.cursor = !hit ? 'default' : (e.shiftKey ? 'crosshair' : 'grab');
+      return;
+    }
+    if (dragging.mode === 'rot'){
+      const a = screenAngle(e, dragging.part);
+      let d = a - dragging.lastAng;
+      if (d > 180) d -= 360;
+      if (d < -180) d += 360;
+      dragging.lastAng = a;
+      let next = rotOf(dragging.part) + (state.mirror ? -d : d);
+      next = ((next + 180) % 360 + 360) % 360 - 180;
+      state.partRot[dragging.part] = Math.round(next * 10) / 10;
+      syncOff();
+      draw();
+      return;
+    }
+    const o = offOf(dragging.part).slice();
+    o[0] += p[0] - dragging.last[0];
+    o[1] += p[1] - dragging.last[1];
+    dragging.last = p;
+    state.partOff[dragging.part] = o;
+    syncOff();
+    draw();
+  });
+
+  function endDrag(e){
+    if (!dragging) return;
+    dragging = null;
+    canvas.style.cursor = 'default';
+    try { canvas.releasePointerCapture(e.pointerId); } catch(_) {}
+  }
+  canvas.addEventListener('pointerup', endDrag);
+  canvas.addEventListener('pointercancel', endDrag);
+
+  // ---------- UI ----------
+  function buildChars(){
+    const box = document.getElementById('charList');
+    box.innerHTML = '';
+    for (const key in REST){
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = REST[key].name;
+      b.dataset.key = key;
+      b.addEventListener('click', () => switchChar(key));
+      box.appendChild(b);
+    }
+    syncChars();
+  }
+  function syncChars(){
+    document.querySelectorAll('#charList button').forEach(b => {
+      b.classList.toggle('on', b.dataset.key === state.key);
+    });
+  }
+
+  function syncInputs(){
+    document.querySelectorAll('input[data-pose]').forEach(inp => {
+      const k = inp.dataset.pose;
+      inp.value = state.pose[k];
+      const out = inp.parentElement.querySelector('output');
+      if (out) out.textContent = state.pose[k] + '°';
+    });
+    document.querySelectorAll('input[data-cal]').forEach(inp => {
+      const k = inp.dataset.cal;
+      inp.value = state.calib[k];
+      const out = inp.parentElement.querySelector('output');
+      if (out) out.textContent = k === 'shDx' || k === 'shDy' || k === 'hipL' || k === 'hipR'
+        ? state.calib[k] + 'px' : Number(state.calib[k]).toFixed(2);
+    });
+  }
+
+  function applySaved(){
+    const s = state.saved[state.key];
+    state.pose = blankPose();
+    state.calib = blankCalib();
+    state.partOff = {};
+    state.partScale = {};
+    state.partRot = {};
+    state.partPivot = {};
+    if (s){
+      if (s.pose) for (const k in state.pose) if (typeof s.pose[k] === 'number') state.pose[k] = s.pose[k];
+      if (s.calib) for (const k in state.calib) if (typeof s.calib[k] === 'number') state.calib[k] = s.calib[k];
+      if (s.partOff) for (const p in s.partOff) if (Array.isArray(s.partOff[p])) state.partOff[p] = s.partOff[p].slice();
+      if (s.partScale) for (const p in s.partScale) if (typeof s.partScale[p] === 'number') state.partScale[p] = s.partScale[p];
+      if (s.partRot) for (const p in s.partRot) if (typeof s.partRot[p] === 'number') state.partRot[p] = s.partRot[p];
+      if (s.partPivot) for (const p in s.partPivot) if (Array.isArray(s.partPivot[p])) state.partPivot[p] = s.partPivot[p].slice();
+    }
+  }
+
+  async function switchChar(key){
+    if (!REST[key]) return;
+    state.key = key;
+    applySaved();
+    if (state.act.frames.length) state.pose = poseFromRow(state.act.frames[state.act.i]);
+    syncChars();
+    syncInputs();
+    syncOff();
+    ready = false;
+    await loadImages(REST[key]);
+    ready = true;
+    draw();
+  }
+
+  function exportRest(){
+    const rest = rigOf(REST[state.key]);
+    const parts = {};
+    for (const p in rest.parts){
+      const d = rest.parts[p];
+      parts[p] = {
+        pivot: pivotOf(p, d),
+        draw: d.draw,
+        mirror: d.mirror,
+        bind: d.bone || (p === 'body' ? 'torso' : 'neck'),
+        axis_offset: p === 'body' ? rest.parts.body.axisOffset
+                   : p === 'head' ? rest.parts.head.axisOffset
+                   : rest.bones[d.bone].axisOffset
+      };
+    }
+    const bones = {};
+    for (const bn of BONE_ORDER){
+      const b = rest.bones[bn];
+      bones[bn] = {
+        base: b.base,
+        child: CHILD[bn],
+        length: +b.len.toFixed(2),
+        phi_static: b.phi
+      };
+    }
+    const out = {
+      version: 1,
+      character: rest.folder,
+      scale: rest.scale,
+      torso: {
+        pivot: rest.parts.body.pivot,
+        neck: rest.neck,
+        pelvis: rest.pelvis,
+        axis_offset: rest.parts.body.axisOffset
+      },
+      head: {
+        pivot: rest.parts.head.pivot,
+        socket_on_torso: rest.neck,
+        eye_offset: rest.parts.head.eyeOffset,
+        axis_offset: rest.parts.head.axisOffset,
+        tilt_limit: 10
+      },
+      anchors: {
+        shoulder: rest.shoulder,
+        left_hip: rest.hips.left,
+        right_hip: rest.hips.right
+      },
+      bones,
+      parts,
+      hinge_sign: rest.hinge,
+      limits: rest.limits,
+      pose: state.pose
+    };
+    const blob = new Blob([JSON.stringify(out, null, 2)], { type:'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'rest_' + rest.folder + '.json';
+    a.click();
+    URL.revokeObjectURL(a.href);
+    toast('已导出 rest.json');
+  }
+
+  // ---------- 绑定 ----------
+  function buildActionUI(){
+    const sel = document.getElementById('actSel');
+    const names = Object.keys(ACTIONS);
+    sel.innerHTML = '';
+    for (const n of names){
+      const o = document.createElement('option');
+      o.value = n; o.textContent = n;
+      sel.appendChild(o);
+    }
+    const op = document.getElementById('offPart');
+    op.innerHTML = '';
+    for (const p in REST[state.key].parts){
+      const o = document.createElement('option');
+      o.value = p; o.textContent = p;
+      op.appendChild(o);
+    }
+    const first = names.indexOf('idle') >= 0 ? 'idle' : names[0];
+    if (first){ sel.value = first; loadAction(first); }
+  }
+
+  document.querySelectorAll('input[data-pose]').forEach(inp => {
+    inp.addEventListener('input', () => {
+      stopPlay();
+      state.pose[inp.dataset.pose] = Number(inp.value);
+      const out = inp.parentElement.querySelector('output');
+      if (out) out.textContent = inp.value + '°';
+      draw();
+    });
+  });
+  document.querySelectorAll('input[data-stdlen]').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const v = Number(inp.value);
+      if (!Number.isFinite(v) || v <= 0) return;
+      state.std.bones[inp.dataset.stdlen].len = v;
+      persistStd();
+      draw();
+    });
+  });
+
+  document.querySelectorAll('input[data-stdpt]').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const v = Number(inp.value);
+      if (!Number.isFinite(v)) return;
+      const k = inp.dataset.stdpt;
+      if (k === 'shx') state.std.shoulder[0] = v;
+      if (k === 'shy') state.std.shoulder[1] = v;
+      if (k === 'hlx') state.std.hips.left[0] = v;
+      if (k === 'hly') state.std.hips.left[1] = v;
+      if (k === 'hrx') state.std.hips.right[0] = v;
+      if (k === 'hry') state.std.hips.right[1] = v;
+      persistStd();
+      draw();
+    });
+  });
+
+  const torsoInp = document.querySelector('input[data-stdtorso]');
+  if (torsoInp) torsoInp.addEventListener('input', () => {
+    const v = Number(torsoInp.value);
+    if (!Number.isFinite(v) || v <= 0) return;
+    const L = Math.hypot(state.std.torso[0], state.std.torso[1]) || 1;
+    state.std.torso = [state.std.torso[0] / L * v, state.std.torso[1] / L * v];
+    persistStd();
+    draw();
+  });
+
+  document.getElementById('btnStdReset').addEventListener('click', () => {    state.std = defaultStd();
+    persistStd();
+    syncStd();
+    draw();
+    toast('标准骨架已恢复默认');
+  });
+
+  window.addEventListener('keydown', e => {
+    const tag = (e.target && e.target.tagName) || '';
+    if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+    const rest = rigOf(REST[state.key]);
+    if (!rest) return;
+    const parts = visibleParts(rest).map(x => x.part);
+    const selEl = document.getElementById('offPart');
+    const cur = selEl ? selEl.value : parts[0];
+    const step = e.shiftKey ? 10 : 1;
+
+    if (e.key === 'Escape' && state.pickPivot){ setPickPivot(false); return; }
+
+    if (/^[0-9]$/.test(e.key)){
+      const i = e.key === '0' ? 9 : Number(e.key) - 1;
+      if (parts[i] && selEl){ selEl.value = parts[i]; syncOff(); draw(); e.preventDefault(); }
+      return;
+    }
+    if (e.key === 'q' || e.key === 'Q' || e.key === 'e' || e.key === 'E'){
+      const d = (e.key.toLowerCase() === 'q' ? -1 : 1) * (e.shiftKey ? 5 : 1);
+      let n = rotOf(cur) + (state.mirror ? -d : d);
+      n = ((n + 180) % 360 + 360) % 360 - 180;
+      state.partRot[cur] = Math.round(n * 10) / 10;
+      syncOff(); draw(); e.preventDefault(); return;
+    }
+    if (e.key.indexOf('Arrow') === 0){
+      const o = offOf(cur).slice();
+      const hf = state.mirror ? -1 : 1;
+      if (e.key === 'ArrowLeft') o[0] -= step * hf;
+      else if (e.key === 'ArrowRight') o[0] += step * hf;
+      else if (e.key === 'ArrowUp') o[1] -= step;
+      else if (e.key === 'ArrowDown') o[1] += step;
+      state.partOff[cur] = o;
+      syncOff(); draw(); e.preventDefault(); return;
+    }
+    if (e.key === 'd' || e.key === 'D'){
+      stopPlay();
+      state.pose = Object.assign(blankPose(), {
+        shR: 90, elR: 0, shL: 90, elL: 0,
+        hipR: 45, knR: 0, hipL: -35, knL: 0
+      });
+      syncInputs(); draw();
+      toast('大字校准姿势（四肢摊开）');
+      e.preventDefault();
+    }
+  });
+
+  syncStd();
+
+  document.querySelectorAll('.seg button').forEach(b => {
+    b.addEventListener('click', () => {
+      state.mode = b.dataset.mode;
+      document.querySelectorAll('.seg button').forEach(x => x.classList.toggle('on', x === b));
+      draw();
+    });
+  });
+
+  function setPickPivot(on){
+    state.pickPivot = on;
+    const b = document.getElementById('btnPickPivot');
+    if (b){
+      b.classList.toggle('on', on);
+      b.textContent = on ? '点取中…' : '点取';
+    }
+    canvas.style.cursor = on ? 'crosshair' : 'default';
+  }
+  document.getElementById('btnPickPivot').addEventListener('click', () => setPickPivot(!state.pickPivot));
+
+  function autoFit(){
+    const rest = rigOf(REST[state.key]);
+    if (!rest) return;
+    let done = 0;
+    for (const part in rest.parts){
+      if (part === 'head') continue;
+      const def = rest.parts[part];
+      const img = state.images[rest.folder + '/' + part];
+      if (!img || !img.naturalWidth) continue;
+      let ang, len, d;
+      if (part === 'body'){
+        len = Math.hypot(rest.neck[0] - rest.pelvis[0], rest.neck[1] - rest.pelvis[1]);
+        if (len < 1) continue;
+        d = [(rest.pelvis[0] - rest.neck[0]) / len, (rest.pelvis[1] - rest.neck[1]) / len];
+        ang = -rest.phiTorso + def.axisOffset;
+      } else {
+        const b = rest.bones[def.bone];
+        len = b.len;
+        d = [Math.sin(rad(b.phi)), Math.cos(rad(b.phi))];
+        ang = -b.phi + b.axisOffset;
+      }
+      const r = rad(-ang), c = Math.cos(r), s = Math.sin(r);
+      const v = [d[0] * c - d[1] * s, d[0] * s + d[1] * c];
+      const pv = pivotOf(part, def);
+      const cw = img.naturalWidth, chh = img.naturalHeight;
+      const off = document.createElement('canvas');
+      off.width = cw; off.height = chh;
+      const octx = off.getContext('2d');
+      octx.drawImage(img, 0, 0);
+      const data = octx.getImageData(0, 0, cw, chh).data;
+      let best = 0;
+      for (let y = 0; y < chh; y += 2){
+        for (let x = 0; x < cw; x += 2){
+          if (data[(y * cw + x) * 4 + 3] <= 24) continue;
+          const proj = (x - pv[0]) * v[0] + (y - pv[1]) * v[1];
+          if (proj > best) best = proj;
+        }
+      }
+      if (best > 6){
+        state.partScale[part] = Math.round(Math.max(0.5, Math.min(1.8, len / best)) * 100) / 100;
+        state.partRot[part] = 0;
+        state.partOff[part] = [0, 0];
+        done++;
+      }
+    }
+    syncOff(); draw();
+    toast('已自动贴合 ' + done + ' 块，可再手动微调');
+  }
+  document.getElementById('btnAutoFit').addEventListener('click', autoFit);
+
+  document.getElementById('optBones').addEventListener('change', e => { state.showBones = e.target.checked; draw(); });
+  document.getElementById('optHoles').addEventListener('change', e => { state.showHoles = e.target.checked; draw(); });
+  document.getElementById('optNames').addEventListener('change', e => { state.showNames = e.target.checked; draw(); });
+  document.getElementById('optOld').addEventListener('change', e => { state.showOld = e.target.checked; draw(); });
+  document.getElementById('optMirror').addEventListener('change', e => { state.mirror = e.target.checked; draw(); });
+
+  document.getElementById('actSel').addEventListener('change', e => loadAction(e.target.value));
+  document.getElementById('actFrame').addEventListener('input', e => {
+    stopPlay();
+    applyFrame(Number(e.target.value));
+  });
+  document.getElementById('btnPlay').addEventListener('click', togglePlay);
+  document.getElementById('btnStopAct').addEventListener('click', () => { stopPlay(); applyFrame(0); });
+
+  document.getElementById('offPart').addEventListener('change', syncOff);
+  document.querySelectorAll('input[data-off]').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const sel = document.getElementById('offPart');
+      if (!sel) return;
+      const o = offOf(sel.value).slice();
+      if (inp.dataset.off === 'x') o[0] = Number(inp.value); else o[1] = Number(inp.value);
+      state.partOff[sel.value] = o;
+      const out = inp.parentElement.querySelector('output');
+      if (out) out.textContent = inp.value + 'px';
+      draw();
+    });
+  });
+
+  document.querySelector('input[data-scale]').addEventListener('input', e => {
+    const sel = document.getElementById('offPart');
+    if (!sel) return;
+    state.partScale[sel.value] = Number(e.target.value);
+    const out = e.target.parentElement.querySelector('output');
+    if (out) out.textContent = Number(e.target.value).toFixed(2) + '×';
+    draw();
+  });
+
+  document.querySelector('input[data-rot]').addEventListener('input', e => {
+    const sel = document.getElementById('offPart');
+    if (!sel) return;
+    state.partRot[sel.value] = Number(e.target.value);
+    const out = e.target.parentElement.querySelector('output');
+    if (out) out.textContent = Number(e.target.value).toFixed(1) + '°';
+    draw();
+  });
+
+  document.getElementById('btnReset').addEventListener('click', () => {
+    stopPlay();
+    state.pose = blankPose();
+    state.calib = blankCalib();
+    state.partOff = {};
+    state.partScale = {};
+    state.partRot = {};
+    state.partPivot = {};
+    syncInputs();
+    syncOff();
+    draw();
+    toast('已复位姿态、标定与部件微调');
+  });
+  document.getElementById('btnSave').addEventListener('click', () => {
+    state.saved[state.key] = {
+      pose:{ ...state.pose }, calib:{ ...state.calib },
+      partOff: JSON.parse(JSON.stringify(state.partOff)),
+      partScale: { ...state.partScale },
+      partRot: { ...state.partRot },
+      partPivot: JSON.parse(JSON.stringify(state.partPivot))
+    };
+    persist();
+    toast('已保存「' + REST[state.key].name + '」');
+  });
+  document.getElementById('btnRest').addEventListener('click', exportRest);
+
+  window.addEventListener('resize', () => draw());
+
+  // ---------- 启动 ----------
+  buildChars();
+  (async function init(){
+    if (!Object.keys(REST).length){
+      hudEl.textContent = '未找到 rest.js';
+      return;
+    }
+    if (REST['xinwukong_material']) state.key = 'xinwukong_material';
+    applySaved();
+    syncChars();
+    syncInputs();
+    syncOff();
+    await loadImages(REST[state.key]);
+    ready = true;
+    buildActionUI();
+    draw();
+  })();
+})();
+</script>
+</body>
+</html>

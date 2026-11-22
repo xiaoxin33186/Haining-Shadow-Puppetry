@@ -9,6 +9,11 @@ DEBUG_MODE = False
 
 SCALE_FACTOR = 0.79
 
+# 新骨骼渲染开关（rig_v2）。默认开启；设环境变量 RIG_V2=0 或删除 rig_v2.py 即回退旧渲染。
+RIG_V2 = os.environ.get("RIG_V2", "1") == "1"
+_rig_v2_mod = None
+_rig_v2_failed = False
+
 BACKGROUND_IMG = "workbackground/stage.jpg"
 MATERIAL_ROOT = Path("xinwukong_material")  # 占位；实际角色目录由 current_character.txt 决定
 VIDEO_NAME = "demo"
@@ -211,6 +216,7 @@ def capture_config():
     供双人偶同时渲染时，每个 render() 调用前按各自角色的快照恢复配置。
     """
     return {
+        "character": CURRENT_CHARACTER,
         "part_param": {p: list(PART_PARAM[p]) for p in PART_PARAM},
         "rot_off": dict(ROT_OFF),
         "part_mirror": dict(PART_MIRROR),
@@ -331,6 +337,30 @@ def render(surface, bg, mats, joints, adjusted_initial_joints, frame_idx,
     mirror_center_x = (joints.get("pelvis")
                        or adjusted_initial_joints.get("pelvis")
                        or {}).get("x", surface.get_width() // 2)
+
+    # ===== 新骨骼渲染（rig_v2）：接管成功则直接返回；失败/关闭时走下面的旧逻辑 =====
+    global _rig_v2_mod, _rig_v2_failed
+    if RIG_V2 and not _rig_v2_failed:
+        if _rig_v2_mod is None:
+            try:
+                import rig_v2
+                _rig_v2_mod = rig_v2
+            except Exception as exc:
+                _rig_v2_failed = True
+                print("[rig_v2] 模块加载失败，继续使用旧渲染:", exc)
+        if _rig_v2_mod is not None:
+            try:
+                if _rig_v2_mod.render(
+                        surface, bg, mats, joints, adjusted_initial_joints,
+                        frame_idx, cfg=cfg, draw_bg=draw_bg,
+                        mirror=scene_mirror,
+                        character=(cfg or {}).get("character"),
+                        draw_parts=PART_NAMES, draw_order=DRAW_ORDER):
+                    return
+            except Exception as exc:
+                _rig_v2_failed = True
+                print("[rig_v2] 渲染失败，继续使用旧渲染:", exc)
+
     if draw_bg:
         surface.blit(bg, (0, 0))
     font = pygame.font.SysFont(None, 20)
