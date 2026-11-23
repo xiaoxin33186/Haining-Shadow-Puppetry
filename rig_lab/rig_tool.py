@@ -13,6 +13,7 @@ import os
 import sys
 import json
 import math
+import copy
 from pathlib import Path
 
 import pygame
@@ -65,6 +66,7 @@ CHAR_KEYS = [
     "new_sha_wujing_material",
     "tang_sanzang_material",
     "new_zhu_bajie_material",
+    "bull_demon_king_material",
 ]
 POSE_KEYS = ["torso", "head", "shR", "elR", "shL", "elL",
              "hipR", "knR", "hipL", "knL", "rx", "ry"]
@@ -330,6 +332,11 @@ class RigTool(object):
         self.play_acc = 0.0
 
         self.images = {}
+        # 回撤/重做：每次操作前存一份当前角色绑定快照（只存内存，S 才写盘）
+        self.undo_stack = []
+        self.redo_stack = []
+        self._drag_snapshot = None
+        self._no_commit = False
         self.switch_char(self.key, initial=True)
         self.load_action(default_act)
         self.update_view()
@@ -388,6 +395,66 @@ class RigTool(object):
             d["mirror"][p] = bool(d["mirror"].get(
                 p, False if baked else defn.get("mirror", False)))
         return d
+
+    # ------------------------------------------------------------ 回撤 / 重做
+    def _sync_bones(self):
+        """把绑定里的骨长 / 骨角 / 轴偏同步回当前角色的骨架。"""
+        for bn, b in self.rig["bones"].items():
+            b.setdefault("len_std", float(b["len"]))
+            b.setdefault("phi_std", float(b["phi"]))
+            b.setdefault("aoff_std", float(b.get("axisOffset", 0.0)))
+            b["len"] = float(self.st["lens"].get(bn, b["len_std"]))
+            b["phi"] = float(self.st["phis"].get(bn, b["phi_std"]))
+            # 轴偏在派生骨长时按“部件名”落盘，兼容旧的“骨名”键
+            part = b.get("part")
+            aoff = self.st["aoff"]
+            b["axisOffset"] = float(aoff.get(part, aoff.get(bn, b["aoff_std"])))
+
+    def _undo_snapshot(self):
+        """当前角色的轻量快照：角色名 + 绑定数据 + 镜像 + 选中件。"""
+        return (self.key, copy.deepcopy(self.st), dict(self.mirror), self.selected)
+
+    def _commit_undo(self, before):
+        """一次操作结束后调用：真改了才入栈，避免空操作刷满历史。"""
+        if before is None or self._no_commit:
+            self._no_commit = False
+            return
+        now = self._undo_snapshot()
+        if before[0] != now[0]:
+            return
+        if (json.dumps(before[1], sort_keys=True) == json.dumps(now[1], sort_keys=True)
+                and before[2] == now[2]):
+            return
+        self.undo_stack.append(before)
+        del self.undo_stack[:-100]
+        self.redo_stack = []
+
+    def _restore(self, snap):
+        key, st, mirror, selected = snap
+        if key != self.key:
+            return
+        self.st = copy.deepcopy(st)
+        self.bind[self.key] = self.st
+        self._sync_bones()
+        self.mirror = dict(mirror)
+        self.selected = selected
+
+    def do_undo(self):
+        if not self.undo_stack:
+            self.msg = "没有可回撤的操作"
+            return
+        self.redo_stack.append(self._undo_snapshot())
+        self._restore(self.undo_stack.pop())
+        self.msg = (f"已回撤（还可回撤 {len(self.undo_stack)} 步，Ctrl+Y 重做；"
+                    f"按 S 才写入文件）")
+
+    def do_redo(self):
+        if not self.redo_stack:
+            self.msg = "没有可重做的操作"
+            return
+        self.undo_stack.append(self._undo_snapshot())
+        self._restore(self.redo_stack.pop())
+        self.msg = f"已重做（还可重做 {len(self.redo_stack)} 步；按 S 保存）"
 
     def part_reach(self, part):
         """素材从枢轴沿骨向到最远可见像素的距离（已乘缩放）。"""
@@ -585,16 +652,10 @@ class RigTool(object):
         self.char_idx = CHAR_KEYS.index(key)
         self.rig = self.rigs[key]
         self.st = self._state_for(key)
-        for bn, b in self.rig["bones"].items():
-            b.setdefault("len_std", float(b["len"]))
-            b.setdefault("phi_std", float(b["phi"]))
-            b.setdefault("aoff_std", float(b.get("axisOffset", 0.0)))
-            b["len"] = float(self.st["lens"].get(bn, b["len_std"]))
-            b["phi"] = float(self.st["phis"].get(bn, b["phi_std"]))
-            # 轴偏在派生骨长时按“部件名”落盘，兼容旧的“骨名”键
-            part = b.get("part")
-            aoff = self.st["aoff"]
-            b["axisOffset"] = float(aoff.get(part, aoff.get(bn, b["aoff_std"])))
+        self._sync_bones()
+        # 换角色后回撤记录作废（快照只对当前角色有效）
+        self.undo_stack = []
+        self.redo_stack = []
         self.load_images(key)
         self.mirror = {p: bool(self.st["mirror"].get(p, False))
                        for p, d in self.rig["parts"].items()}
@@ -1005,7 +1066,7 @@ class RigTool(object):
             "PgUp/PgDn=图层  1-0=选件  R=复位  B=全部复位  M=单件镜像  "
             "L=全部镜像  F=场景镜像  V=标记  Y=示意图",
             "O=自动竖直  X=烘焙  G=生成本角色骨长  S=保存绑定  +/-=视图缩放  D=大字校准  "
-            "Esc=退出  (骨架: 统一 FK, 四角色共用)",
+            "Ctrl+Z=回撤  Ctrl+Y=重做  Esc=退出  (骨架: 统一 FK, 五角色共用)",
         ]
         if self.selected:
             p = self.selected
@@ -1291,6 +1352,15 @@ class RigTool(object):
         mods = getattr(e, "mod", pygame.key.get_mods())
         shift = bool(mods & pygame.KMOD_SHIFT)
 
+        # 回撤 / 重做（Ctrl+Z 撤销，Ctrl+Y 或 Ctrl+Shift+Z 重做）
+        if key in (pygame.K_z, pygame.K_y) and (mods & pygame.KMOD_CTRL):
+            self._no_commit = True
+            if key == pygame.K_y or shift:
+                self.do_redo()
+            else:
+                self.do_undo()
+            return
+
         if key == pygame.K_ESCAPE:
             if self.pick_pivot or self.pick_tip:
                 self.pick_pivot = False
@@ -1512,16 +1582,26 @@ class RigTool(object):
                 self.view = None
                 self.msg = f"窗口已调为 {self.sw}x{self.sh}"
             elif e.type == pygame.KEYDOWN:
+                before = self._undo_snapshot()
                 self.on_key(e)
+                self._commit_undo(before)
             elif e.type == pygame.MOUSEBUTTONDOWN:
+                if e.button in (1, 3):
+                    # 拖动/旋转开始前存快照，松手时整体算一步
+                    self._drag_snapshot = self._undo_snapshot()
                 if e.button == 1:
                     self.on_left_down(e.pos)
                 elif e.button == 3 and self.selected:
                     self.rotating = True
                     self.last_mouse = e.pos
                 elif e.button in (4, 5):
+                    before = self._undo_snapshot()
                     self.on_wheel(1 if e.button == 4 else -1)
+                    self._commit_undo(before)
             elif e.type == pygame.MOUSEBUTTONUP:
+                if e.button in (1, 3):
+                    self._commit_undo(self._drag_snapshot)
+                    self._drag_snapshot = None
                 if e.button == 1:
                     self.dragging = False
                     self.last_mouse = None
@@ -1533,7 +1613,9 @@ class RigTool(object):
                 if self.dragging or self.rotating:
                     self.on_motion(e.pos)
             elif e.type == pygame.MOUSEWHEEL:
+                before = self._undo_snapshot()
                 self.on_wheel(e.y)
+                self._commit_undo(before)
 
 
 # ---------------------------------------------------------------- 入口
@@ -1545,7 +1627,7 @@ def run_selftest():
     tool = RigTool(screen)
     SELFTEST_ROOT.mkdir(parents=True, exist_ok=True)
     ok = True
-    print("[selftest] 统一骨骼 FK · 4 角色 idle 首帧")
+    print("[selftest] 统一骨骼 FK · 5 角色 idle 首帧")
     for key in CHAR_KEYS:
         tool.switch_char(key)
         tool.load_action("idle" if "idle" in ACTIONS else tool.action_names[0])

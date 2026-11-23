@@ -60,7 +60,7 @@ CHAR_DISPLAY = {
     "bull_demon_king_material": "牛魔王",
     # "sha_wujing_material": "沙僧",               # [停用] 已由新沙僧取代
     "new_sha_wujing_material": "新沙僧",
-    "zhu_bajie_material": "猪八戒",
+    # "zhu_bajie_material": "猪八戒",               # [停用] 已由新猪八戒取代
     "tang_sanzang_material": "唐三藏",
     "new_zhu_bajie_material": "新猪八戒",
 }
@@ -70,6 +70,7 @@ DISABLED_CHARACTERS = {
     "wukong_shadow_play_material",  # 旧悟空
     "shadow_play_material",         # 海宁通用
     "sha_wujing_material",          # 旧沙僧（已由新沙僧取代）
+    "zhu_bajie_material",           # 旧猪八戒（已由新猪八戒取代）
 }
 
 def _candidate_dirs():
@@ -77,7 +78,8 @@ def _candidate_dirs():
              # "wukong_shadow_play_material",  # [停用] 旧悟空
              # "shadow_play_material",         # [停用] 海宁通用
              "bull_demon_king_material",
-             "new_sha_wujing_material", "zhu_bajie_material",
+             "new_sha_wujing_material",
+             # "zhu_bajie_material",           # [停用] 旧猪八戒
              "tang_sanzang_material", "new_zhu_bajie_material"]
     found = []
     try:
@@ -325,7 +327,7 @@ def rotate_bound_pg(img, angle_cw, pivot_x, pivot_y):
     return rotated, move_x, move_y
 
 def render(surface, bg, mats, joints, adjusted_initial_joints, frame_idx,
-           cfg=None, draw_bg=True, mirror=None):
+           cfg=None, draw_bg=True, mirror=None, action=None):
     if cfg is not None:
         apply_config(cfg)
     # 整体水平镜像：mirror=None 用角色配置(SCENE_MIRROR)，True/False 强制指定
@@ -355,7 +357,8 @@ def render(surface, bg, mats, joints, adjusted_initial_joints, frame_idx,
                         frame_idx, cfg=cfg, draw_bg=draw_bg,
                         mirror=scene_mirror,
                         character=(cfg or {}).get("character"),
-                        draw_parts=PART_NAMES, draw_order=DRAW_ORDER):
+                        draw_parts=PART_NAMES, draw_order=DRAW_ORDER,
+                        action=action):
                     return
             except Exception as exc:
                 _rig_v2_failed = True

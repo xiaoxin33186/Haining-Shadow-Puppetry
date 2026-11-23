@@ -1125,6 +1125,7 @@ class Puppet:
         self.action_frames = []
         self.action_initial_joints = {}
         self.json_list = []
+        self.render_action = None  # [KICK] 当前动作名，渲染层据此做踢腿重映射
         self.queue = q if q is not None else queue.Queue()
 
         initial_pelvis = init_joints.get('pelvis', {'x': self.center_x, 'y': self.center_y})
@@ -1308,6 +1309,11 @@ class Puppet:
             for joint_name, original_pos in frame_joint_data_original.items()
             if original_pos
         }
+        # [KICK] 记录当前动作名（只在动作播放中），供渲染层判断是否做踢腿重映射
+        self.render_action = (
+            Path(self.json_list[0]).stem
+            if (self.state == 'action' and self.json_list) else None
+        )
         return joints_for_render, reply_new
 
 
@@ -1990,6 +1996,7 @@ def pygame_loop():
                 frame_idx=0,
                 cfg=puppet0.cfg,
                 draw_bg=False,
+                action=puppet0.render_action,
             )
         if puppet1 and puppet1.mats and j1:
             pg_base.render(
@@ -2000,6 +2007,7 @@ def pygame_loop():
                 cfg=puppet1.cfg,
                 draw_bg=False,
                 mirror=mirror1,  # 与左偶反向→对峙
+                action=puppet1.render_action,
             )
 
         # [视频集成] 渲染视频画面与控件（居中覆盖，两侧留给人偶）

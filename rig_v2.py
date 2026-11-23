@@ -180,10 +180,44 @@ def _delta(cur, ref):
     return norm_deg(cur - ref)
 
 
-def build(rig, joints, ref=None):
+# [KICK] 踢腿按角色骨长重映射：抬腿峰值角按腿长比例缩放，腿短的角色改成前踢
+KICK_MIN_SCALE = 0.45   # 下限：再短的腿也保留 45% 幅度，避免踢腿塌成小动作
+KICK_LEG_BONES = ("thighR", "shinR")   # 踢腿用的是右腿
+KICK_LAYER_SKIP = {"tang_sanzang_material"}  # 长袍整体遮腿，保持原样（2026-11-23 确认）
+KICK_LAYER_MIN_LIFT = 12.0  # 大腿抬起超过该角度才把腿部提到身前，站姿/收腿不加层
+_STD_LEG_LEN = None
+
+
+def _std_leg_len():
+    """标准角色（悟空）的右腿长，含 rig_bind.json 的绑定覆盖值；只算一次。"""
+    global _STD_LEG_LEN
+    if _STD_LEG_LEN is None:
+        try:
+            std = rig_for(STD_KEY)
+            _STD_LEG_LEN = (float(std["bones"]["thighR"]["len"])
+                            + float(std["bones"]["shinR"]["len"]))
+        except (KeyError, TypeError, AttributeError):
+            _STD_LEG_LEN = 0.0
+    return _STD_LEG_LEN
+
+
+def _kick_leg_scale(rig):
+    """踢腿幅度系数 = 角色右腿长 / 标准腿长（悟空），限制在 [KICK_MIN_SCALE, 1]。"""
+    try:
+        std_len = _std_leg_len()
+        leg = float(rig["bones"]["thighR"]["len"]) + float(rig["bones"]["shinR"]["len"])
+    except (KeyError, TypeError):
+        return 1.0
+    if std_len <= 0 or leg <= 0:
+        return 1.0
+    return max(KICK_MIN_SCALE, min(1.0, leg / std_len))
+
+
+def build(rig, joints, ref=None, leg_scale=None):
     """由动作朝向增量 + 绑定骨长推关节：返回 (j, angles)。
 
     ref 为 idle 首帧关节（基准），保证静止时与 rig_lab 里的绑定姿态一致。
+    leg_scale 不为 None 时，只把右腿（踢腿侧）的朝向增量乘以该系数。
     """
     ref = ref or joints
     pelvis = joints.get("pelvis") or {"x": 0.0, "y": 0.0}
@@ -205,6 +239,8 @@ def build(rig, joints, ref=None):
     for bn in BONE_ORDER:
         j1, j2 = BONE_JOINTS[bn]
         d = _delta(_dir(joints, j1, j2), _dir(ref, j1, j2))
+        if leg_scale is not None and bn in KICK_LEG_BONES:
+            d *= leg_scale
         phi[bn] = float(rig["bones"][bn]["phi"]) + d
 
     for bn in BONE_ORDER:
@@ -246,8 +282,11 @@ def _rotate_bound(img, angle_cw, px, py):
 # ---------------------------------------------------------------- 渲染入口
 def render(surface, bg, mats, joints, adjusted_initial_joints, frame_idx,
            cfg=None, draw_bg=True, mirror=None, character=None,
-           draw_parts=None, draw_order=None):
-    """v2 渲染入口。返回 True 表示已接管；False 表示交回旧渲染。"""
+           draw_parts=None, draw_order=None, action=None):
+    """v2 渲染入口。返回 True 表示已接管；False 表示交回旧渲染。
+
+    action: 当前动作名（如 "kick"）；只用于踢腿的按骨长重映射，其他动作不受影响。
+    """
     import pygame
 
     cfg = cfg or {}
@@ -264,13 +303,25 @@ def render(surface, bg, mats, joints, adjusted_initial_joints, frame_idx,
     scene_mirror = (bool(cfg.get("scene_mirror", False))
                     if mirror is None else bool(mirror))
     ref = adjusted_initial_joints or joints
-    j, angles = build(rig, joints, ref)
+    # [KICK] 只有踢腿动作做按骨长重映射
+    is_kick = bool(action) and Path(str(action)).stem.lower() == "kick"
+    leg_scale = _kick_leg_scale(rig) if is_kick else None
+    j, angles = build(rig, joints, ref, leg_scale=leg_scale)
 
     pelvis = joints.get("pelvis") or {"x": surface.get_width() // 2.0,
                                       "y": surface.get_height() // 2.0}
     mirror_center_x = float(pelvis["x"])
     order = draw_order or cfg.get("draw_order") or {}
     parts = draw_parts or [p for p in rig["parts"]]
+    # [KICK] 踢腿时把踢腿侧腿部提到身体前面，避免被衣摆遮住（仅抬腿阶段生效）
+    if is_kick and character not in KICK_LAYER_SKIP:
+        lift = abs(_delta(_dir(joints, "right_hip", "right_knee"),
+                          _dir(ref, "right_hip", "right_knee")))
+        if lift >= KICK_LAYER_MIN_LIFT:
+            top = max([order.get(p, rig["parts"][p]["draw"]) for p in parts] + [0])
+            order = dict(order)
+            order["right_hip"] = top + 1   # 大腿
+            order["right_knee"] = top + 2  # 小腿+脚，压在大腿之上
     center_x = surface.get_width() // 2
     center_y = surface.get_height() // 2
 

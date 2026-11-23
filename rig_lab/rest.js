@@ -1341,5 +1341,340 @@ window.REST_RIGS = {
       }
     },
     "skeleton": "unified"
+  },
+  "bull_demon_king_material": {
+    "name": "牛魔王",
+    "folder": "bull_demon_king_material",
+    "scale": 0.79,
+    "pelvis": [
+      0.0,
+      0.0
+    ],
+    "neck": [
+      4.51,
+      -207.53
+    ],
+    "shoulder": [
+      13.17,
+      -193.1
+    ],
+    "shoulderEyes": {
+      "right": [
+        -8.75,
+        -194.89
+      ],
+      "left": [
+        35.09,
+        -191.31
+      ]
+    },
+    "hips": {
+      "left": [
+        23.17,
+        7.56
+      ],
+      "right": [
+        -23.17,
+        -20.22
+      ]
+    },
+    "phiTorso": -1.246,
+    "parts": {
+      "body": {
+        "pivot": [
+          56.5,
+          2.9
+        ],
+        "size": [
+          134,
+          243
+        ],
+        "draw": 3,
+        "mirror": false,
+        "img": "../bull_demon_king_material/body.png",
+        "pos": "neck",
+        "axisOffset": 4.137
+      },
+      "head": {
+        "pivot": [
+          241.5,
+          4.2
+        ],
+        "size": [
+          332,
+          187
+        ],
+        "draw": 2,
+        "mirror": false,
+        "img": "../bull_demon_king_material/head.png",
+        "pos": "headEye",
+        "eyeOffset": [
+          52.62,
+          -149.01
+        ],
+        "axisOffset": 6.377
+      },
+      "right_elbow": {
+        "bone": "upperR",
+        "pivot": [
+          41.1,
+          10.5
+        ],
+        "size": [
+          107,
+          165
+        ],
+        "draw": 4,
+        "mirror": false,
+        "img": "../bull_demon_king_material/right_elbow.png"
+      },
+      "right_wrist": {
+        "bone": "foreR",
+        "pivot": [
+          77.6,
+          11.3
+        ],
+        "size": [
+          142,
+          172
+        ],
+        "draw": 4,
+        "mirror": false,
+        "img": "../bull_demon_king_material/right_wrist.png"
+      },
+      "left_elbow": {
+        "bone": "upperL",
+        "pivot": [
+          51.5,
+          18.4
+        ],
+        "size": [
+          97,
+          209
+        ],
+        "draw": 1,
+        "mirror": false,
+        "img": "../bull_demon_king_material/left_elbow.png"
+      },
+      "left_wrist": {
+        "bone": "foreL",
+        "pivot": [
+          70.6,
+          17.9
+        ],
+        "size": [
+          129,
+          216
+        ],
+        "draw": 2,
+        "mirror": false,
+        "img": "../bull_demon_king_material/left_wrist.png"
+      },
+      "right_hip": {
+        "bone": "thighR",
+        "pivot": [
+          64.8,
+          8.9
+        ],
+        "size": [
+          118,
+          214
+        ],
+        "draw": 1,
+        "mirror": false,
+        "img": "../bull_demon_king_material/right_hip.png"
+      },
+      "right_knee": {
+        "bone": "shinR",
+        "pivot": [
+          57.4,
+          0.9
+        ],
+        "size": [
+          117,
+          154
+        ],
+        "draw": 3,
+        "mirror": false,
+        "img": "../bull_demon_king_material/right_knee.png"
+      },
+      "left_hip": {
+        "bone": "thighL",
+        "pivot": [
+          107.8,
+          6.8
+        ],
+        "size": [
+          211,
+          230
+        ],
+        "draw": 1,
+        "mirror": false,
+        "img": "../bull_demon_king_material/left_hip.png"
+      },
+      "left_knee": {
+        "bone": "shinL",
+        "pivot": [
+          15.7,
+          2.8
+        ],
+        "size": [
+          116,
+          152
+        ],
+        "draw": 3,
+        "mirror": false,
+        "img": "../bull_demon_king_material/left_knee.png"
+      }
+    },
+    "bones": {
+      "upperR": {
+        "base": "shoulder",
+        "len": 107.193,
+        "phi": -9.02,
+        "part": "right_elbow",
+        "axisOffset": -1.183
+      },
+      "foreR": {
+        "base": "elbowR",
+        "len": 81.622,
+        "phi": -14.263,
+        "part": "right_wrist",
+        "axisOffset": 333.25
+      },
+      "upperL": {
+        "base": "shoulder",
+        "len": 123.595,
+        "phi": 45.645,
+        "part": "left_elbow",
+        "axisOffset": 363.558
+      },
+      "foreL": {
+        "base": "elbowL",
+        "len": 88.379,
+        "phi": -17.295,
+        "part": "left_wrist",
+        "axisOffset": 306.268
+      },
+      "thighR": {
+        "base": "hipR",
+        "len": 129.977,
+        "phi": -16.751,
+        "part": "right_hip",
+        "axisOffset": -6.099
+      },
+      "shinR": {
+        "base": "kneeR",
+        "len": 113.402,
+        "phi": 8.965,
+        "part": "right_knee",
+        "axisOffset": 11.24
+      },
+      "thighL": {
+        "base": "hipL",
+        "len": 115.746,
+        "phi": -14.105,
+        "part": "left_hip",
+        "axisOffset": 341.543
+      },
+      "shinL": {
+        "base": "kneeL",
+        "len": 104.993,
+        "phi": 22.789,
+        "part": "left_knee",
+        "axisOffset": 378.695
+      }
+    },
+    "limits": {
+      "torso": [
+        -25,
+        25
+      ],
+      "head": [
+        -10,
+        10
+      ],
+      "shoulder": [
+        -40,
+        155
+      ],
+      "elbow": [
+        0,
+        150
+      ],
+      "hip": [
+        -35,
+        130
+      ],
+      "knee": [
+        0,
+        140
+      ]
+    },
+    "hinge": {
+      "elbowR": 1,
+      "elbowL": 1,
+      "kneeR": -1,
+      "kneeL": -1
+    },
+    "bonesFit": {
+      "upperR": {
+        "base": "shoulder",
+        "len": 107.193,
+        "phi": -9.02,
+        "part": "right_elbow",
+        "axisOffset": -1.183
+      },
+      "foreR": {
+        "base": "elbowR",
+        "len": 81.622,
+        "phi": -14.263,
+        "part": "right_wrist",
+        "axisOffset": 333.25
+      },
+      "upperL": {
+        "base": "shoulder",
+        "len": 123.595,
+        "phi": 45.645,
+        "part": "left_elbow",
+        "axisOffset": 363.558
+      },
+      "foreL": {
+        "base": "elbowL",
+        "len": 88.379,
+        "phi": -17.295,
+        "part": "left_wrist",
+        "axisOffset": 306.268
+      },
+      "thighR": {
+        "base": "hipR",
+        "len": 129.977,
+        "phi": -16.751,
+        "part": "right_hip",
+        "axisOffset": -6.099
+      },
+      "shinR": {
+        "base": "kneeR",
+        "len": 113.402,
+        "phi": 8.965,
+        "part": "right_knee",
+        "axisOffset": 11.24
+      },
+      "thighL": {
+        "base": "hipL",
+        "len": 115.746,
+        "phi": -14.105,
+        "part": "left_hip",
+        "axisOffset": 341.543
+      },
+      "shinL": {
+        "base": "kneeL",
+        "len": 104.993,
+        "phi": 22.789,
+        "part": "left_knee",
+        "axisOffset": 378.695
+      }
+    },
+    "skeleton": "unified"
   }
 };
