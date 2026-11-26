@@ -508,10 +508,10 @@
       "right_wrist": -16.5,
       "left_elbow": -45.0,
       "left_wrist": -22.0,
-      "right_hip": 12.0,
-      "right_knee": -3.5,
+      "right_hip": 1.5,
+      "right_knee": 8.0,
       "left_hip": 2.0,
-      "left_knee": -23.0
+      "left_knee": -8.5
     },
     "off": {
       "body": [
@@ -584,9 +584,9 @@
       "foreR": 110.454,
       "upperL": 113.004,
       "foreL": 110.023,
-      "thighR": 54.148,
+      "thighR": 52.254,
       "shinR": 89.918,
-      "thighL": 59.211,
+      "thighL": 57.116,
       "shinL": 82.152
     },
     "tip": {
@@ -636,20 +636,30 @@
       "foreR": -158.539,
       "upperL": 44.799,
       "foreL": -75.519,
-      "thighR": -4.173,
-      "shinR": 6.109,
-      "thighL": 29.473,
-      "shinL": 28.513
+      "thighR": -9.922,
+      "shinR": -0.266,
+      "thighL": -7.623,
+      "shinL": 11.989
     },
     "aoff": {
       "right_elbow": -10.616,
       "right_wrist": -158.539,
       "left_elbow": 44.799,
       "left_wrist": -75.519,
-      "right_hip": -4.173,
-      "right_knee": 6.109,
-      "left_hip": 29.473,
-      "left_knee": 28.513
+      "right_hip": -9.922,
+      "right_knee": -0.266,
+      "left_hip": -7.623,
+      "left_knee": 11.989
+    },
+    "hips": {
+      "left": [
+        32.031,
+        30.345
+      ],
+      "right": [
+        -34.562,
+        17.755
+      ]
     }
   },
   "bull_demon_king_material": {
@@ -713,7 +723,7 @@
       "right_elbow": 0.0,
       "right_wrist": -23.5,
       "left_elbow": 0.0,
-      "left_wrist": -47.0,
+      "left_wrist": -53.5,
       "right_hip": 0.0,
       "right_knee": 0.0,
       "left_hip": -11.5,
@@ -737,12 +747,12 @@
         10.126582278481013
       ],
       "left_elbow": [
-        0.0,
-        0.0
+        7.594936708860757,
+        32.91139240506328
       ],
       "left_wrist": [
-        -18.98734177215188,
-        -40.506329113924046
+        -24.050632911392384,
+        -7.594936708860754
       ],
       "right_hip": [
         0.0,

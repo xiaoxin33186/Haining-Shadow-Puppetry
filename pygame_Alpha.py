@@ -57,7 +57,7 @@ CHAR_DISPLAY = {
     "xinwukong_material": "悟空",
     # "wukong_shadow_play_material": "旧悟空",   # [停用] 不再显示
     # "shadow_play_material": "海宁通用",         # [停用] 不再显示
-    "bull_demon_king_material": "牛魔王",
+    # "bull_demon_king_material": "牛魔王",        # [停用] 不再显示
     # "sha_wujing_material": "沙僧",               # [停用] 已由新沙僧取代
     "new_sha_wujing_material": "新沙僧",
     # "zhu_bajie_material": "猪八戒",               # [停用] 已由新猪八戒取代
@@ -71,13 +71,14 @@ DISABLED_CHARACTERS = {
     "shadow_play_material",         # 海宁通用
     "sha_wujing_material",          # 旧沙僧（已由新沙僧取代）
     "zhu_bajie_material",           # 旧猪八戒（已由新猪八戒取代）
+    "bull_demon_king_material",     # 牛魔王
 }
 
 def _candidate_dirs():
     known = ["xinwukong_material",
              # "wukong_shadow_play_material",  # [停用] 旧悟空
              # "shadow_play_material",         # [停用] 海宁通用
-             "bull_demon_king_material",
+             # "bull_demon_king_material",     # [停用] 牛魔王
              "new_sha_wujing_material",
              # "zhu_bajie_material",           # [停用] 旧猪八戒
              "tang_sanzang_material", "new_zhu_bajie_material"]

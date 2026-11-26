@@ -15,6 +15,29 @@ ROOT = Path(__file__).resolve().parent
 LAB = ROOT / "rig_lab"
 SCALE_FACTOR = 0.79
 
+# 关节补片 / 边缘补边（防止动作时部件之间露出背景）
+EDGE_DILATE = 2          # 每个部件沿不透明边缘向外扩的像素数（素材坐标）
+JOINT_CAP_RADIUS = 7.0   # 小关节补片半径（素材坐标），实际按 SCALE_FACTOR 缩放
+JOINT_CAP_RADIUS_BIG = 12.0   # 肩/髋这类大关节补片半径
+JOINT_CAP_MIN_R = 4      # 补片最小屏幕半径
+BIG_JOINTS = {"left_elbow", "right_elbow", "left_hip", "right_hip"}
+_CAP_CACHE = {}
+_COLOR_CACHE = {}
+
+CHAR_SCALE_FILE = LAB / "char_scale.json"
+
+
+def _load_char_scales():
+    """读取每角色的整体缩放（用于统一人物大小）；文件缺失时全部按 1.0。"""
+    try:
+        data = json.loads(CHAR_SCALE_FILE.read_text(encoding="utf-8"))
+        return {k: float(v) for k, v in data.items()}
+    except Exception:
+        return {}
+
+
+CHAR_SCALES = _load_char_scales()
+
 
 def _read_js_value(path, marker):
     text = path.read_text(encoding="utf-8")
@@ -124,7 +147,34 @@ def rig_for(character):
     rig["_scale"] = st.get("scale") or {}
     rig["_rot"] = st.get("rot") or {}
     rig["_off"] = st.get("off") or {}
+    rig["_name"] = character
+    # 髋关节位置允许按角色覆盖（重链骨骼时把髋孔位置写进来，off 才能清零）
+    st_hips = st.get("hips") or {}
+    for side in ("left", "right"):
+        if side in st_hips:
+            rig["hips"][side] = [float(st_hips[side][0]), float(st_hips[side][1])]
+    _apply_char_scale(rig, CHAR_SCALES.get(character, 1.0))
     return rig
+
+
+def _apply_char_scale(rig, cs):
+    """整体缩放角色：骨长、躯干锚点、眼位一起乘，素材在 render 里同步乘。"""
+    cs = float(cs or 1.0)
+    rig["_char_scale"] = cs
+    if abs(cs - 1.0) < 1e-6:
+        return
+    rig["neck"] = [float(rig["neck"][0]) * cs, float(rig["neck"][1]) * cs]
+    rig["shoulder"] = [float(rig["shoulder"][0]) * cs,
+                       float(rig["shoulder"][1]) * cs]
+    for side in ("left", "right"):
+        hv = rig["hips"][side]
+        rig["hips"][side] = [float(hv[0]) * cs, float(hv[1]) * cs]
+    for b in rig["bones"].values():
+        b["len"] = float(b["len"]) * cs
+    head = rig["parts"].get("head")
+    if head and head.get("eyeOffset"):
+        head["eyeOffset"] = [float(head["eyeOffset"][0]) * cs,
+                             float(head["eyeOffset"][1]) * cs]
 
 
 # ---------------------------------------------------------------- 图片（烘焙优先）
@@ -134,6 +184,96 @@ _MATS_CACHE = {}
 def reset_cache():
     """素材/绑定被重新烘焙后可调用本函数强制重载。"""
     _MATS_CACHE.clear()
+    _CAP_CACHE.clear()
+    _COLOR_CACHE.clear()
+
+
+def _avg_color(img):
+    """取素材不透明区域的平均色，用作补边/补片颜色。"""
+    import pygame
+
+    try:
+        c = pygame.transform.average_color(img, consider_alpha=True)
+    except TypeError:
+        c = pygame.transform.average_color(img)
+    if not any(c[:3]):
+        c = (60, 40, 30)
+    return (int(c[0]), int(c[1]), int(c[2]))
+
+
+def _with_edge(img):
+    """把素材沿边缘向外扩 EDGE_DILATE 像素，用邻像素真实颜色填充。
+
+    旋转/错位时露出的是同色补边而不是背景，消除 1-3px 细缝；
+    与平均色方案不同，花纹/袖口等渐变色部位也能自然过渡。
+    """
+    import pygame
+
+    if EDGE_DILATE <= 0:
+        return img
+    try:
+        w, h = img.get_size()
+        base = pygame.Surface((w, h), pygame.SRCALPHA)
+        base.blit(img, (0, 0))
+        step = EDGE_DILATE
+        for dy in (-step, 0, step):
+            for dx in (-step, 0, step):
+                if dx == 0 and dy == 0:
+                    continue
+                base.blit(img, (dx, dy))
+        base.blit(img, (0, 0))
+        return base
+    except Exception:
+        return img
+
+
+def _pivot_color(img, px, py, r=6):
+    """补片颜色：取素材枢轴附近不透明像素的平均色，与关节处同色。
+
+    用整块素材的平均色会把花纹/白色/描边混进来（例如躯干平均色偏灰），
+    在红裤等部位补出异色圆斑；改为只在枢轴周围取色即可贴合。
+    """
+    key = (id(img), int(px), int(py))
+    cached = _COLOR_CACHE.get(key)
+    if cached is not None:
+        return cached
+    w, h = img.get_size()
+    acc = [0, 0, 0, 0]
+    try:
+        for x in range(max(0, int(px) - r), min(w, int(px) + r + 1), 2):
+            for y in range(max(0, int(py) - r), min(h, int(py) + r + 1), 2):
+                c = img.get_at((x, y))
+                if c.a < 200:
+                    continue
+                acc[0] += c.r
+                acc[1] += c.g
+                acc[2] += c.b
+                acc[3] += 1
+    except Exception:
+        acc[3] = 0
+    if acc[3]:
+        color = (acc[0] // acc[3], acc[1] // acc[3], acc[2] // acc[3])
+    else:
+        color = _avg_color(img)
+    _COLOR_CACHE[key] = color
+    return color
+
+
+def _cap_surface(color, radius):
+    """生成带抗锯齿的圆形关节补片（按颜色+半径缓存）。"""
+    import pygame
+
+    key = (color, int(radius))
+    surf = _CAP_CACHE.get(key)
+    if surf is not None:
+        return surf
+    r = max(1, int(radius))
+    ss = 4
+    big = pygame.Surface((r * 2 * ss, r * 2 * ss), pygame.SRCALPHA)
+    pygame.draw.circle(big, color + (255,), (r * ss, r * ss), r * ss)
+    surf = pygame.transform.smoothscale(big, (r * 2, r * 2))
+    _CAP_CACHE[key] = surf
+    return surf
 
 
 def _mats_for(character, fallback):
@@ -141,13 +281,14 @@ def _mats_for(character, fallback):
     import pygame
 
     if not character:
-        return fallback, {}
+        return {p: _with_edge(img) for p, img in fallback.items()}, {}
     cached = _MATS_CACHE.get(character)
     if cached is not None:
         return cached
     baked_dir = LAB / "baked" / character
     if not baked_dir.is_dir():
-        _MATS_CACHE[character] = (fallback, {})
+        out = {p: _with_edge(img) for p, img in fallback.items()}
+        _MATS_CACHE[character] = (out, {})
         return _MATS_CACHE[character]
     mats = dict(fallback)
     baked_flags = {}
@@ -160,6 +301,7 @@ def _mats_for(character, fallback):
             baked_flags[part] = True
         except Exception:
             pass
+    mats = {p: _with_edge(img) for p, img in mats.items()}
     _MATS_CACHE[character] = (mats, baked_flags)
     return _MATS_CACHE[character]
 
@@ -183,6 +325,11 @@ def _delta(cur, ref):
 # [KICK] 踢腿按角色骨长重映射：抬腿峰值角按腿长比例缩放，腿短的角色改成前踢
 KICK_MIN_SCALE = 0.45   # 下限：再短的腿也保留 45% 幅度，避免踢腿塌成小动作
 KICK_LEG_BONES = ("thighR", "shinR")   # 踢腿用的是右腿
+# 个别角色的踢腿幅度直接指定（覆盖按腿长算出的系数，可调高或调低）
+KICK_SCALE_OVERRIDE = {"new_sha_wujing_material": 0.75,
+                       "new_zhu_bajie_material": 0.9}
+# 踢腿屈膝：小腿的朝向增量再乘该系数，抬腿时膝盖留一点弯曲（不写则保持原样）
+KICK_KNEE_LAG = {}
 KICK_LAYER_SKIP = {"tang_sanzang_material"}  # 长袍整体遮腿，保持原样（2026-11-23 确认）
 KICK_LAYER_MIN_LIFT = 12.0  # 大腿抬起超过该角度才把腿部提到身前，站姿/收腿不加层
 _STD_LEG_LEN = None
@@ -210,7 +357,8 @@ def _kick_leg_scale(rig):
         return 1.0
     if std_len <= 0 or leg <= 0:
         return 1.0
-    return max(KICK_MIN_SCALE, min(1.0, leg / std_len))
+    s = max(KICK_MIN_SCALE, min(1.0, leg / std_len))
+    return KICK_SCALE_OVERRIDE.get(rig.get("_name"), s)
 
 
 def build(rig, joints, ref=None, leg_scale=None):
@@ -241,6 +389,8 @@ def build(rig, joints, ref=None, leg_scale=None):
         d = _delta(_dir(joints, j1, j2), _dir(ref, j1, j2))
         if leg_scale is not None and bn in KICK_LEG_BONES:
             d *= leg_scale
+            if bn == "shinR":
+                d *= KICK_KNEE_LAG.get(rig.get("_name"), 1.0)
         phi[bn] = float(rig["bones"][bn]["phi"]) + d
 
     for bn in BONE_ORDER:
@@ -324,6 +474,7 @@ def render(surface, bg, mats, joints, adjusted_initial_joints, frame_idx,
             order["right_knee"] = top + 2  # 小腿+脚，压在大腿之上
     center_x = surface.get_width() // 2
     center_y = surface.get_height() // 2
+    cs = float(rig.get("_char_scale", 1.0))
 
     for part in sorted(parts, key=lambda p: order.get(p, rig["parts"][p]["draw"])):
         info = rig["parts"].get(part)
@@ -334,6 +485,7 @@ def render(surface, bg, mats, joints, adjusted_initial_joints, frame_idx,
             continue
 
         px, py = list(info["pivot"])[:2]
+        cap_src, cap_px, cap_py = img, px, py
         use_mirror = bool(info.get("mirror"))
         if use_mirror:
             img = pygame.transform.flip(img, True, False)
@@ -350,11 +502,11 @@ def render(surface, bg, mats, joints, adjusted_initial_joints, frame_idx,
         ang = base_ang + float((rig["_rot"] or {}).get(part, 0.0))
 
         off = list((rig["_off"] or {}).get(part) or [0.0, 0.0])
-        wx += off[0]
-        wy += off[1]
+        wx += off[0] * cs
+        wy += off[1] * cs
 
         rotated, mvx, mvy = _rotate_bound(img, ang, px, py)
-        sc = SCALE_FACTOR * float((rig["_scale"] or {}).get(part, 1.0))
+        sc = SCALE_FACTOR * float((rig["_scale"] or {}).get(part, 1.0)) * cs
         nw = max(1, int(round(rotated.get_width() * sc)))
         nh = max(1, int(round(rotated.get_height() * sc)))
         if (nw, nh) != rotated.get_size():
@@ -366,6 +518,15 @@ def render(surface, bg, mats, joints, adjusted_initial_joints, frame_idx,
             wx = 2 * mirror_center_x - wx
         fx = (wx - center_x) * SCALE_FACTOR + center_x
         fy = (wy - center_y + 65) * SCALE_FACTOR + center_y
+
+        # 关节补片：用关节处的本部件颜色垫一个圆，盖住旋转产生的缝隙
+        if info.get("bone") and JOINT_CAP_RADIUS > 0:
+            color = _pivot_color(cap_src, cap_px, cap_py)
+            base_r = (JOINT_CAP_RADIUS_BIG if part in BIG_JOINTS
+                      else JOINT_CAP_RADIUS)
+            cap_r = max(JOINT_CAP_MIN_R, int(round(base_r * sc)))
+            cap = _cap_surface(color, cap_r)
+            surface.blit(cap, (fx - cap_r, fy - cap_r))
 
         if scene_mirror:
             rotated = pygame.transform.flip(rotated, True, False)
