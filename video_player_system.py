@@ -875,22 +875,32 @@ class VideoPlayerSystem:
         self._status_is_error = is_error
 
     def initialize_network(self) -> Tuple[bool, str]:
-        if not is_online():
-            self._network_checked = True
-            self._network_ok = False
-            return False, "请连接网络"
-        self._network_checked = True
-        self._network_ok = True
-
+        # 缓存是本地文件：先加载，保证断网也能列出剧名（标题来自缓存、点播时再下载）
         if not self.videos:
             cached = self._load_cache()
             if cached:
                 self.videos = cached
                 print(f"[视频库] 从缓存加载 {len(cached)} 条")
-                return True, f"已从缓存加载 {len(cached)} 条视频"
+
+        if not is_online():
+            self._network_ok = False
+            if self.videos:
+                # 有缓存可列目录：标记已检查，避免每条视频指令都白等一次网络探测
+                self._network_checked = True
+                return True, f"离线，已使用缓存（{len(self.videos)} 条）"
+            # 没有缓存且离线：不标记已检查，网络恢复后下次指令能重试
+            self._network_checked = False
+            return False, "请连接网络"
+
+        self._network_checked = True
+        self._network_ok = True
+
+        if not self.videos:
             print(f"[视频库] 开始抓取 keyword='{self._keyword}'...")
             videos = self.fetcher.fetch_all(self._keyword)
             if not videos:
+                # 抓取失败不算"已就绪"，下次指令允许重试
+                self._network_checked = False
                 return False, "未获取到视频，请检查网络"
             self.videos = videos
             self._save_cache(videos)
